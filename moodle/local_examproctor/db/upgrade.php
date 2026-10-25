@@ -43,5 +43,13 @@ function xmldb_local_examproctor_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102600, 'local', 'examproctor');
     }
 
+    if ($oldversion < 2026102800) {
+        // M4: institutional reference photos.
+        if (!$dbman->table_exists('local_examproctor_refphoto')) {
+            $dbman->install_one_table_from_xmldb_file(__DIR__ . '/install.xml', 'local_examproctor_refphoto');
+        }
+        upgrade_plugin_savepoint(true, 2026102800, 'local', 'examproctor');
+    }
+
     return true;
 }

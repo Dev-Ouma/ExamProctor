@@ -2,7 +2,7 @@
 COMPOSE := docker compose -f staging/compose.yml --env-file staging/.env --env-file staging/examproctor.secrets
 MOODLE_EXEC := $(COMPOSE) exec -T -u www-data moodle
 
-.PHONY: up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle
+.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle
 
 staging/.env:
 	@cp staging/.env.example staging/.env
@@ -30,7 +30,7 @@ reset:  ## Destroy all staging data volumes.
 
 seed:
 	$(MOODLE_EXEC) php /opt/seed/seed.php
-	$(MOODLE_EXEC) sh -c 'php admin/cli/cfg.php --component=local_examproctor --name=serviceurl --set="$$EXAMPROCTOR_PUBLIC_URL" && php admin/cli/cfg.php --component=local_examproctor --name=signingkey --set="$$EXAMPROCTOR_SHARED_SECRET" && php admin/cli/cfg.php --component=local_examproctor --name=camerainterval --set=10 && php admin/cli/cfg.php --component=local_examproctor --name=screeninterval --set=15 && php admin/cli/purge_caches.php'
+	$(MOODLE_EXEC) sh -c 'php admin/cli/cfg.php --component=local_examproctor --name=serviceurl --set="$$EXAMPROCTOR_PUBLIC_URL" && php admin/cli/cfg.php --component=local_examproctor --name=signingkey --set="$$EXAMPROCTOR_SHARED_SECRET" && php admin/cli/cfg.php --component=local_examproctor --name=camerainterval --set=10 && php admin/cli/cfg.php --component=local_examproctor --name=screeninterval --set=15 && php admin/cli/cfg.php --component=local_examproctor --name=serviceinternalurl --set="$$EXAMPROCTOR_INTERNAL_URL" && php admin/cli/purge_caches.php'
 
 test-browser:  ## Real Chromium with fake camera/screen against the staging stack.
 	cd staging/browser && npm ci --silent && npx playwright install chromium >/dev/null && STUDENT=epstudent$$(shuf -i 5-20 -n 1 2>/dev/null || jot -r 1 5 20) npx playwright test --workers=1
@@ -48,6 +48,9 @@ ps:
 	$(COMPOSE) ps
 
 test: test-service test-js
+
+models:  ## Download the pinned face models for local tests.
+	cd service && ./fetch_models.sh models
 
 test-service:
 	cd service && uv run ruff check . && uv run ruff format --check . && uv run pytest -q

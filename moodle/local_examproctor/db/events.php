@@ -29,4 +29,8 @@ $observers = [
         'eventname' => '\mod_quiz\event\attempt_started',
         'callback' => '\local_examproctor\observer::attempt_started',
     ],
+    [
+        'eventname' => '\\core\\event\\user_deleted',
+        'callback' => '\\local_examproctor\\observer::user_deleted',
+    ],
 ];

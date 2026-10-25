@@ -4,6 +4,10 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
+RUN apt-get update && apt-get install -y --no-install-recommends curl libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+COPY fetch_models.sh ./
+RUN ./fetch_models.sh /app/models
 COPY examproctor_service ./examproctor_service
 RUN uv sync --frozen --no-dev
 RUN useradd --system --uid 10001 app

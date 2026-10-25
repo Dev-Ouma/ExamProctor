@@ -102,6 +102,26 @@ services:
       EXAMPROCTOR_CORS_ORIGINS: '["http://localhost:${MOODLE_PORT:-8080}"]'
     ports: ["127.0.0.1:8000:8000"]
 
+  worker:
+    build: ../service
+    environment:
+      EXAMPROCTOR_ENV: staging
+      EXAMPROCTOR_DATABASE_URL: postgresql://examproctor:${SERVICE_DB_PASSWORD}@service-db:5432/examproctor
+      EXAMPROCTOR_REDIS_URL: redis://redis:6379/0
+      EXAMPROCTOR_OBJECT_STORE_URL: http://objectstore:8333
+      EXAMPROCTOR_OBJECT_STORE_PUBLIC_URL: http://localhost:8333
+      EXAMPROCTOR_OBJECT_STORE_ACCESS_KEY: ${EXAMPROCTOR_S3_ACCESS_KEY}
+      EXAMPROCTOR_OBJECT_STORE_SECRET_KEY: ${EXAMPROCTOR_S3_SECRET_KEY}
+      EXAMPROCTOR_MOODLE_ISSUER: http://localhost:${MOODLE_PORT:-8080}
+      EXAMPROCTOR_MOODLE_SHARED_SECRET: ${EXAMPROCTOR_SHARED_SECRET}
+      EXAMPROCTOR_MOODLE_WEBHOOK_URL: http://moodle/local/examproctor/webhook.php
+      EXAMPROCTOR_MOODLE_WEBHOOK_HOST: localhost:${MOODLE_PORT:-8080}
+      EXAMPROCTOR_SESSION_SIGNING_KEY: ${EXAMPROCTOR_SESSION_KEY}
+      EXAMPROCTOR_CORS_ORIGINS: '["http://localhost:${MOODLE_PORT:-8080}"]'
+    command: ["python", "-m", "examproctor_service.worker"]
+    depends_on:
+      service: { condition: service_started }
+
 volumes:
   moodle-db:
   moodledata:

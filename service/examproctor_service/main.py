@@ -18,6 +18,8 @@ from .config import Settings, get_settings
 from .evidence import router as evidence_router
 from .health import run_checks
 from .objectstore import ObjectStore, S3ObjectStore
+from .refphotos import router as refphotos_router
+from .refstore import MemoryRefStore, PgRefStore
 from .retention import loop as retention_loop
 from .store import PgStore, Store
 from .webhooks import retry_loop
@@ -39,6 +41,7 @@ def create_app(
         app.state.store = store or await PgStore.connect(settings.database_url)
         app.state.http = http or httpx.AsyncClient(timeout=10)
         app.state.objects = objects or S3ObjectStore(settings)
+        app.state.refs = PgRefStore(app.state.store.pool) if owned_store else MemoryRefStore()
         background = []
         if owned_store:
             await app.state.objects.ensure_bucket()
@@ -62,7 +65,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST"],  # admin PUT/DELETE are server-to-server only
         allow_headers=["Authorization", "Content-Type", "X-Request-Id"],
     )
 
@@ -75,11 +78,7 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def error_body(request: Request, exc: HTTPException) -> JSONResponse:
-        detail = (
-            exc.detail
-            if isinstance(exc.detail, dict)
-            else {"code": "error", "message": str(exc.detail)}
-        )
+        detail = exc.detail if isinstance(exc.detail, dict) else {"code": "error", "message": str(exc.detail)}
         detail = {**detail, "request_id": getattr(request.state, "request_id", None)}
         return JSONResponse(status_code=exc.status_code, content={"error": detail})
 
@@ -100,6 +99,7 @@ def create_app(
 
     app.include_router(sessions_router)
     app.include_router(evidence_router)
+    app.include_router(refphotos_router)
     return app
 
 

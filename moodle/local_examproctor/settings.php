@@ -27,6 +27,12 @@ defined('MOODLE_INTERNAL') || die();
 if ($hassiteconfig) {
     $settings = new admin_settingpage('local_examproctor', get_string('pluginname', 'local_examproctor'));
     $ADMIN->add('localplugins', $settings);
+    $ADMIN->add('localplugins', new admin_externalpage(
+        'local_examproctor_refphotos',
+        get_string('refphotos', 'local_examproctor'),
+        new moodle_url('/local/examproctor/refphotos.php'),
+        'local/examproctor:managerefphotos'
+    ));
 
     $settings->add(new admin_setting_configselect(
         'local_examproctor/mode',
@@ -48,6 +54,13 @@ if ($hassiteconfig) {
         'local_examproctor/serviceurl',
         get_string('serviceurl', 'local_examproctor'),
         get_string('serviceurl_desc', 'local_examproctor'),
+        '',
+        PARAM_URL
+    ));
+    $settings->add(new admin_setting_configtext(
+        'local_examproctor/serviceinternalurl',
+        get_string('serviceinternalurl', 'local_examproctor'),
+        get_string('serviceinternalurl_desc', 'local_examproctor'),
         '',
         PARAM_URL
     ));

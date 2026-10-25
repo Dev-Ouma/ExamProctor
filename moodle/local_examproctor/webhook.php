@@ -77,6 +77,30 @@ switch ($message['event']) {
         gate::record_ready($userid, $quizid, $sessionid, (array) ($data['policy'] ?? []), (array) ($data['context'] ?? []));
         local_examproctor_webhook_reply(200, ['ok' => true]);
         break;
+    case 'score.updated':
+        $sessionid = clean_param($data['session_id'] ?? '', PARAM_ALPHANUMEXT);
+        $band = clean_param($data['band'] ?? '', PARAM_ALPHA);
+        if ($sessionid === '' || !in_array($band, ['clear', 'review', 'high'], true)) {
+            local_examproctor_webhook_reply(400, ['error' => 'bad_data']);
+        }
+        $DB->set_field_select(
+            'local_examproctor_attempt',
+            'integrityscore',
+            (float) ($data['integrity_score'] ?? 0),
+            'sessionid = ?',
+            [$sessionid]
+        );
+        $DB->set_field_select('local_examproctor_attempt', 'band', $band, 'sessionid = ?', [$sessionid]);
+        $DB->set_field_select(
+            'local_examproctor_attempt',
+            'flagcount',
+            (int) ($data['flag_count'] ?? 0),
+            'sessionid = ?',
+            [$sessionid]
+        );
+        $DB->set_field_select('local_examproctor_attempt', 'timemodified', time(), 'sessionid = ?', [$sessionid]);
+        local_examproctor_webhook_reply(200, ['ok' => true]);
+        break;
     default:
         // Unknown events are acknowledged so the service does not retry them forever.
         local_examproctor_webhook_reply(200, ['ok' => true, 'ignored' => $message['event']]);

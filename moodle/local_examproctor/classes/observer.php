@@ -36,4 +36,14 @@ class observer {
         $attempt = $event->get_record_snapshot('quiz_attempts', $event->objectid);
         gate::link_attempt((int) $attempt->id, (int) $attempt->userid, (int) $attempt->quiz);
     }
+
+    /**
+     * Remove a deleted user's reference photo, here and at the service.
+     *
+     * @param \core\event\user_deleted $event
+     * @return void
+     */
+    public static function user_deleted(\core\event\user_deleted $event): void {
+        \local_examproctor\local\refphotos::delete((int) $event->objectid);
+    }
 }

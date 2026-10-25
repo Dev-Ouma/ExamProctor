@@ -464,6 +464,8 @@
 			HTMLFormElement.prototype.submit.call(form);
 			this.events.attach(window);
 			this.events.record("shell_loaded");
+			const extended = window.screen.isExtended;
+			if (extended !== void 0) this.events.record("display_info", { extended });
 			this.watchStream(this.deps.screen, "screen");
 			this.watchStream(this.deps.camera, "camera");
 			this.startLoops();
@@ -512,6 +514,10 @@
 				new StreamFrameSource(this.deps.screen, 1280, .5),
 				this.deps.policy.screen_interval_s ?? 60
 			]);
+			if (this.deps.policy.identity && sources[0]?.[0] === "camera") {
+				const camera = sources[0][1];
+				window.setTimeout(() => void captureOnce("reference", camera, this.deps.queue, this.epoch - 1e3), 1500);
+			}
 			for (const [kind, source, seconds] of sources) this.every(seconds * 1e3, () => captureOnce(kind, source, this.deps.queue, this.epoch));
 			const drain = async () => {
 				if (this.stopped) return;

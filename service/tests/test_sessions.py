@@ -6,9 +6,7 @@ DESKTOP_OK = {"camera": "ok", "screen": "ok", "screen_surface": "monitor", "netw
 
 
 def start(client, settings, **claims):
-    response = client.post(
-        "/v1/sessions/exchange", json={"launch_token": launch_token(settings, **claims)}
-    )
+    response = client.post("/v1/sessions/exchange", json={"launch_token": launch_token(settings, **claims)})
     assert response.status_code == 200, response.text
     body = response.json()
     return body, {"Authorization": f"Bearer {body['session_token']}"}
@@ -77,9 +75,7 @@ def test_session_endpoints_need_the_matching_session_token(client, settings):
 def test_precheck_requires_consent_first(client, settings):
     session, headers = start(client, settings)
 
-    response = client.post(
-        f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers
-    )
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers)
 
     assert response.status_code == 409
 
@@ -88,9 +84,7 @@ def test_passing_precheck_sends_signed_ready_webhook(client, settings, moodle):
     session, headers = start(client, settings)
     assert consent(client, session, headers, settings).json() == {"status": "consented"}
 
-    response = client.post(
-        f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers
-    )
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers)
 
     assert response.json()["status"] == "ready"
     assert response.json()["ready_delivered"] is True
@@ -129,9 +123,7 @@ def test_strict_mode_blocks_window_share_and_sends_nothing(client, settings, moo
 
 
 def test_lenient_mode_lets_phone_continue_without_screen(client, settings, moodle):
-    session, headers = start(
-        client, settings, policy={"camera": True, "screen": True, "strict": False}
-    )
+    session, headers = start(client, settings, policy={"camera": True, "screen": True, "strict": False})
     consent(client, session, headers, settings)
 
     response = client.post(
@@ -145,14 +137,10 @@ def test_lenient_mode_lets_phone_continue_without_screen(client, settings, moodl
 
 
 def test_denied_camera_blocks_even_in_lenient_mode(client, settings):
-    session, headers = start(
-        client, settings, policy={"camera": True, "screen": False, "strict": False}
-    )
+    session, headers = start(client, settings, policy={"camera": True, "screen": False, "strict": False})
     consent(client, session, headers, settings)
 
-    response = client.post(
-        f"/v1/sessions/{session['session_id']}/precheck", json={"camera": "denied"}, headers=headers
-    )
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json={"camera": "denied"}, headers=headers)
 
     assert response.json()["reasons"] == ["camera_denied"]
 
@@ -162,9 +150,7 @@ def test_undelivered_ready_stays_in_outbox_for_retry(client, settings, moodle, s
     session, headers = start(client, settings)
     consent(client, session, headers, settings)
 
-    response = client.post(
-        f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers
-    )
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers)
 
     assert response.json() == {
         "session_id": session["session_id"],

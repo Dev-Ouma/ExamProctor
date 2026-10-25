@@ -59,7 +59,12 @@ $quiz->cmid = get_coursemodule_from_instance('quiz', $quiz->id)->id;
 if (!$DB->record_exists('quiz_slots', ['quizid' => $quiz->id])) {
     // Question generator needs the PHPUnit framework; save through the question type API instead.
     $context = context_module::instance($quiz->cmid);
-    $category = question_get_default_category($context->id, true);
+    // Fresh quiz: its question bank category may not exist yet.
+    $category = question_get_default_category($context->id, true) ?: question_make_default_categories([$context]);
+    if (empty($category->id)) {
+        throw new moodle_exception('Could not create a question category for the seeded quiz');
+    }
+    mtrace("Question category {$category->id} in context {$context->id}");
     $qtype = question_bank::get_qtype('truefalse');
     for ($i = 1; $i <= 5; $i++) {
         $question = new stdClass();
@@ -82,11 +87,13 @@ if (!$DB->record_exists('quiz_slots', ['quizid' => $quiz->id])) {
     \mod_quiz\quiz_settings::create($quiz->id)->get_grade_calculator()->recompute_quiz_sumgrades();
     mtrace('Added 5 questions to quiz');
 }
-if (!$DB->record_exists('quizaccess_examproctor', ['quizid' => $quiz->id])) {
-    // Proctoring on: camera and screen, lenient so phones can still sit the practice quiz.
-    $DB->insert_record('quizaccess_examproctor', (object) [
-        'quizid' => $quiz->id, 'enabled' => 1, 'camera' => 1, 'screen' => 1, 'identity' => 0, 'strict' => 0,
-    ]);
-    mtrace('Enabled ExamProctor on the quiz');
+// Proctoring on: camera and screen, lenient so phones can still sit the practice quiz.
+// Creating the quiz already stored a default (disabled) policy row, so update rather than insert.
+$policy = ['quizid' => $quiz->id, 'enabled' => 1, 'camera' => 1, 'screen' => 1, 'identity' => 1, 'strict' => 0];
+if ($existing = $DB->get_record('quizaccess_examproctor', ['quizid' => $quiz->id])) {
+    $DB->update_record('quizaccess_examproctor', (object) (['id' => $existing->id] + $policy));
+} else {
+    $DB->insert_record('quizaccess_examproctor', (object) $policy);
 }
+mtrace('ExamProctor enabled on the quiz');
 mtrace('Seed done. Login users: epteacher, epinvigilator, epreviewer, epstudent01..' . sprintf('%02d', STUDENTS));

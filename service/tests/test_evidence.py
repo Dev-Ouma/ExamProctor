@@ -14,9 +14,7 @@ JPEG = b"\xff\xd8\xff" + b"synthetic frame" * 100
 def ready_session(client, settings):
     session, headers = start(client, settings)
     consent(client, session, headers, settings)
-    response = client.post(
-        f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers
-    )
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json=DESKTOP_OK, headers=headers)
     assert response.json()["status"] == "ready"
     return session["session_id"], headers
 
@@ -41,9 +39,7 @@ def test_upload_round_trip_is_verified_by_sha256(client, ready_session, objects)
     assert body["key"].endswith(f"/{sid}/camera/000000.jpg")
     objects.put(body["key"], JPEG)
 
-    done = client.post(
-        f"/v1/sessions/{sid}/uploads/complete", json={"key": body["key"]}, headers=headers
-    )
+    done = client.post(f"/v1/sessions/{sid}/uploads/complete", json={"key": body["key"]}, headers=headers)
 
     assert done.json() == {"key": body["key"], "status": "verified"}
 
@@ -59,9 +55,7 @@ def test_tampered_object_is_rejected(client, ready_session, objects):
     assert done.json()["error"]["code"] == "checksum_mismatch"
 
 
-def test_duplicate_presign_is_idempotent_and_conflicting_content_refused(
-    client, ready_session, objects
-):
+def test_duplicate_presign_is_idempotent_and_conflicting_content_refused(client, ready_session, objects):
     sid, headers = ready_session
     key = presign(client, sid, headers).json()["key"]
     objects.put(key, JPEG)
@@ -75,18 +69,14 @@ def test_duplicate_presign_is_idempotent_and_conflicting_content_refused(
 
 
 def test_uploads_need_ready_session_policy_and_size_limit(client, settings):
-    session, headers = start(
-        client, settings, policy={"camera": True, "screen": False, "strict": False}
-    )
+    session, headers = start(client, settings, policy={"camera": True, "screen": False, "strict": False})
     sid = session["session_id"]
     assert presign(client, sid, headers).status_code == 409  # not ready yet
 
     consent(client, session, headers, settings)
     client.post(f"/v1/sessions/{sid}/precheck", json={"camera": "ok"}, headers=headers)
     assert presign(client, sid, headers, kind="screen").status_code == 403
-    assert (
-        presign(client, sid, headers, data=b"x" * (settings.max_image_bytes + 1)).status_code == 413
-    )
+    assert presign(client, sid, headers, data=b"x" * (settings.max_image_bytes + 1)).status_code == 413
 
 
 def test_events_are_filtered_to_known_types(client, ready_session, store):
@@ -116,9 +106,7 @@ def test_heartbeat_and_finish(client, ready_session, objects):
     assert finished.json() == {"status": "finished", "uploads": {"camera": 1}}
 
 
-def test_retention_deletes_expired_evidence_but_respects_legal_hold(
-    client, ready_session, store, objects, settings
-):
+def test_retention_deletes_expired_evidence_but_respects_legal_hold(client, ready_session, store, objects, settings):
     sid, headers = ready_session
     key = presign(client, sid, headers).json()["key"]
     objects.put(key, JPEG)

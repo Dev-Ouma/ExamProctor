@@ -15,6 +15,8 @@ class ObjectStore(Protocol):
     def presign_put(self, key: str, content_type: str, length: int, ttl_s: int) -> str: ...
     async def sha256_of(self, key: str) -> tuple[str, int] | None: ...
     async def delete_prefix(self, prefix: str) -> int: ...
+    async def get_bytes(self, key: str) -> bytes | None: ...
+    async def put_bytes(self, key: str, data: bytes, content_type: str) -> None: ...
 
 
 class S3ObjectStore:
@@ -63,6 +65,20 @@ class S3ObjectStore:
 
         return await asyncio.to_thread(run)
 
+    async def get_bytes(self, key: str) -> bytes | None:
+        def run() -> bytes | None:
+            try:
+                return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+            except self.client.exceptions.NoSuchKey:
+                return None
+
+        return await asyncio.to_thread(run)
+
+    async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        await asyncio.to_thread(
+            lambda: self.client.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=content_type)
+        )
+
     async def delete_prefix(self, prefix: str) -> int:
         def run() -> int:
             deleted = 0
@@ -95,6 +111,12 @@ class MemoryObjectStore:
     async def sha256_of(self, key: str) -> tuple[str, int] | None:
         data = self.objects.get(key)
         return None if data is None else (hashlib.sha256(data).hexdigest(), len(data))
+
+    async def get_bytes(self, key: str) -> bytes | None:
+        return self.objects.get(key)
+
+    async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        self.objects[key] = data
 
     async def delete_prefix(self, prefix: str) -> int:
         keys = [k for k in self.objects if k.startswith(prefix)]

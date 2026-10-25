@@ -107,9 +107,7 @@ class CompleteRequest(BaseModel):
 
 
 @router.post("/{session_id}/uploads/complete")
-async def complete(
-    body: CompleteRequest, session: SessionDep, store: StoreDep, objects: ObjectsDep
-) -> dict[str, Any]:
+async def complete(body: CompleteRequest, session: SessionDep, store: StoreDep, objects: ObjectsDep) -> dict[str, Any]:
     require_capturing(session)
     upload = await store.get_upload(session.id, body.key)
     if upload is None:
@@ -143,10 +141,7 @@ async def events(body: EventBatch, session: SessionDep, store: StoreDep) -> dict
     require_capturing(session)
     accepted = [e for e in body.events if e.type in EVENT_TYPES]
     await store.add_events(
-        [
-            Event(session_id=session.id, type=e.type, client_ts=e.ts, payload=e.data)
-            for e in accepted
-        ]
+        [Event(session_id=session.id, type=e.type, client_ts=e.ts, payload=e.data) for e in accepted]
     )
     return {"accepted": len(accepted), "rejected": len(body.events) - len(accepted)}
 

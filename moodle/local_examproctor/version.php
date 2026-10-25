@@ -25,7 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_examproctor';
-$plugin->version = 2026102700;
+$plugin->version = 2026102800;
 $plugin->requires = 2024100700; // Moodle 4.5.
 $plugin->maturity = MATURITY_ALPHA;
-$plugin->release = '0.3.0 (M3)';
+$plugin->release = '0.4.0 (M4)';

@@ -64,6 +64,16 @@ class config {
     }
 
     /**
+     * Service base URL for server-to-server calls from Moodle (may be an internal name).
+     *
+     * @return string
+     */
+    public static function internal_url(): string {
+        $internal = rtrim((string) get_config('local_examproctor', 'serviceinternalurl'), '/');
+        return $internal !== '' ? $internal : self::service_url();
+    }
+
+    /**
      * Snapshot intervals in seconds, at least 5.
      *
      * @return array{camera_interval_s: int, screen_interval_s: int}

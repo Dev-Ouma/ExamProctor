@@ -59,4 +59,12 @@ $capabilities = [
             'manager' => CAP_ALLOW,
         ],
     ],
+    'local/examproctor:managerefphotos' => [
+        'riskbitmask' => RISK_PERSONAL | RISK_DATALOSS,
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
+            'manager' => CAP_ALLOW,
+        ],
+    ],
 ];

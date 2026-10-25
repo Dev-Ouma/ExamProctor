@@ -216,6 +216,41 @@ CREATE TABLE IF NOT EXISTS events (
     server_ts TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, client_ts);
+ALTER TABLE uploads ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+ALTER TABLE uploads ADD COLUMN IF NOT EXISTS analysis JSONB;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS reference_embedding JSONB;
+CREATE INDEX IF NOT EXISTS uploads_unanalysed ON uploads (captured_at)
+    WHERE status = 'verified' AND analysis IS NULL;
+CREATE TABLE IF NOT EXISTS reference_photos (
+    moodle_user_id BIGINT PRIMARY KEY,
+    key TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT,
+    face_px INT,
+    embedding JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS flags (
+    session_id UUID NOT NULL REFERENCES sessions (id),
+    idx INT NOT NULL,
+    type TEXT NOT NULL,
+    severity INT NOT NULL,
+    confidence REAL NOT NULL,
+    start_ts TIMESTAMPTZ NOT NULL,
+    end_ts TIMESTAMPTZ NOT NULL,
+    evidence JSONB NOT NULL,
+    context JSONB NOT NULL,
+    question TEXT,
+    PRIMARY KEY (session_id, idx)
+);
+CREATE TABLE IF NOT EXISTS scores (
+    session_id UUID PRIMARY KEY REFERENCES sessions (id),
+    value REAL NOT NULL,
+    band TEXT NOT NULL,
+    reasons JSONB NOT NULL,
+    version TEXT NOT NULL,
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS webhook_outbox (
     id BIGSERIAL PRIMARY KEY,
     event TEXT NOT NULL,
@@ -315,19 +350,15 @@ class PgStore:
 
     async def enqueue(self, event: str, payload: dict[str, Any]) -> OutboxItem:
         row = await self.pool.fetchrow(
-            "INSERT INTO webhook_outbox (event, payload) VALUES ($1, $2)"
-            " RETURNING id, attempts, next_try_at",
+            "INSERT INTO webhook_outbox (event, payload) VALUES ($1, $2) RETURNING id, attempts, next_try_at",
             event,
             json.dumps(payload),
         )
-        return OutboxItem(
-            id=row["id"], event=event, payload=payload, next_try_at=row["next_try_at"]
-        )
+        return OutboxItem(id=row["id"], event=event, payload=payload, next_try_at=row["next_try_at"])
 
     async def due_outbox(self, now: datetime, limit: int = 50) -> list[OutboxItem]:
         rows = await self.pool.fetch(
-            "SELECT * FROM webhook_outbox WHERE delivered_at IS NULL AND next_try_at <= $1"
-            " ORDER BY id LIMIT $2",
+            "SELECT * FROM webhook_outbox WHERE delivered_at IS NULL AND next_try_at <= $1 ORDER BY id LIMIT $2",
             now,
             limit,
         )
@@ -344,9 +375,7 @@ class PgStore:
 
     async def mark_delivered(self, item: OutboxItem, now: datetime) -> None:
         item.delivered_at = now
-        await self.pool.execute(
-            "UPDATE webhook_outbox SET delivered_at = $2 WHERE id = $1", item.id, now
-        )
+        await self.pool.execute("UPDATE webhook_outbox SET delivered_at = $2 WHERE id = $1", item.id, now)
 
     async def mark_failed(self, item: OutboxItem, next_try_at: datetime) -> None:
         item.attempts += 1
@@ -403,20 +432,15 @@ class PgStore:
 
     async def count_uploads(self, session_id: str) -> dict[str, int]:
         rows = await self.pool.fetch(
-            "SELECT kind, count(*) AS n FROM uploads WHERE session_id = $1 AND status = 'verified'"
-            " GROUP BY kind",
+            "SELECT kind, count(*) AS n FROM uploads WHERE session_id = $1 AND status = 'verified' GROUP BY kind",
             uuid.UUID(session_id),
         )
         return {r["kind"]: r["n"] for r in rows}
 
     async def add_events(self, events: list[Event]) -> int:
         await self.pool.executemany(
-            "INSERT INTO events (session_id, type, payload, client_ts, server_ts)"
-            " VALUES ($1, $2, $3, $4, $5)",
-            [
-                (uuid.UUID(e.session_id), e.type, json.dumps(e.payload), e.client_ts, e.server_ts)
-                for e in events
-            ],
+            "INSERT INTO events (session_id, type, payload, client_ts, server_ts) VALUES ($1, $2, $3, $4, $5)",
+            [(uuid.UUID(e.session_id), e.type, json.dumps(e.payload), e.client_ts, e.server_ts) for e in events],
         )
         return len(events)
 

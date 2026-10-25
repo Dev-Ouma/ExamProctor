@@ -21,12 +21,14 @@ use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
 use core_privacy\local\request\contextlist;
 use core_privacy\local\request\userlist;
+use core_privacy\local\request\transform;
 use core_privacy\local\request\writer;
+use local_examproctor\local\refphotos;
 
 /**
  * Privacy provider for local_examproctor.
  *
- * Covers the Moodle-side tables. Service-held evidence is added in M5.
+ * Covers the Moodle-side tables and reference photos. Service-held evidence is added in M5.
  *
  * @package    local_examproctor
  * @copyright  2026 Open University of Kenya
@@ -60,9 +62,17 @@ class provider implements
             'integrityscore' => 'privacy:metadata:attempt:integrityscore',
             'band' => 'privacy:metadata:attempt:band',
         ], 'privacy:metadata:attempt');
+        $collection->add_database_table('local_examproctor_refphoto', [
+            'userid' => 'privacy:metadata:refphoto:userid',
+            'status' => 'privacy:metadata:refphoto:status',
+            'source' => 'privacy:metadata:refphoto:source',
+            'timemodified' => 'privacy:metadata:refphoto:timemodified',
+        ], 'privacy:metadata:refphoto');
+        $collection->add_subsystem_link('core_files', [], 'privacy:metadata:refphoto:file');
         $collection->add_external_location_link('examproctor_service', [
             'userid' => 'privacy:metadata:service:userid',
             'quizid' => 'privacy:metadata:service:quizid',
+            'photo' => 'privacy:metadata:service:photo',
         ], 'privacy:metadata:service');
         return $collection;
     }
@@ -93,6 +103,9 @@ class provider implements
         foreach (self::TABLES as $table) {
             $list->add_from_sql(self::context_sql($table), ['level' => CONTEXT_MODULE, 'userid' => $userid]);
         }
+        if (refphotos::get($userid)) {
+            $list->add_system_context();
+        }
         return $list;
     }
 
@@ -104,6 +117,10 @@ class provider implements
      */
     public static function get_users_in_context(userlist $userlist): void {
         $context = $userlist->get_context();
+        if ($context instanceof \context_system) {
+            $userlist->add_from_sql('userid', 'SELECT userid FROM {local_examproctor_refphoto}', []);
+            return;
+        }
         if (!$context instanceof \context_module) {
             return;
         }
@@ -123,6 +140,14 @@ class provider implements
         global $DB;
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system && ($photo = refphotos::get((int) $userid))) {
+                $path = [get_string('refphotos', 'local_examproctor')];
+                writer::with_context($context)
+                    ->export_data($path, (object) ['status' => $photo->status, 'reason' => $photo->reason,
+                        'source' => $photo->source, 'timemodified' => transform::datetime($photo->timemodified)])
+                    ->export_area_files($path, 'local_examproctor', refphotos::FILEAREA, (int) $userid);
+                continue;
+            }
             if (!$context instanceof \context_module || !($quizid = self::quizid($context))) {
                 continue;
             }
@@ -153,6 +178,12 @@ class provider implements
      */
     public static function delete_data_for_all_users_in_context(\context $context): void {
         global $DB;
+        if ($context instanceof \context_system) {
+            foreach ($DB->get_fieldset_select('local_examproctor_refphoto', 'userid', '1 = 1') as $userid) {
+                refphotos::delete((int) $userid);
+            }
+            return;
+        }
         if ($context instanceof \context_module && ($quizid = self::quizid($context))) {
             foreach (self::TABLES as $table) {
                 $DB->delete_records($table, ['quizid' => $quizid]);
@@ -170,6 +201,9 @@ class provider implements
         global $DB;
         $userid = $contextlist->get_user()->id;
         foreach ($contextlist->get_contexts() as $context) {
+            if ($context instanceof \context_system) {
+                refphotos::delete((int) $userid);
+            }
             if ($context instanceof \context_module && ($quizid = self::quizid($context))) {
                 foreach (self::TABLES as $table) {
                     $DB->delete_records($table, ['quizid' => $quizid, 'userid' => $userid]);
@@ -187,6 +221,12 @@ class provider implements
     public static function delete_data_for_users(approved_userlist $userlist): void {
         global $DB;
         $context = $userlist->get_context();
+        if ($context instanceof \context_system) {
+            foreach ($userlist->get_userids() as $userid) {
+                refphotos::delete((int) $userid);
+            }
+            return;
+        }
         if (!$context instanceof \context_module || !($quizid = self::quizid($context)) || !$userlist->get_userids()) {
             return;
         }

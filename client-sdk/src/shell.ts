@@ -64,6 +64,9 @@ export class ExamShell {
 
     this.events.attach(window);
     this.events.record("shell_loaded");
+    // Chromium exposes whether the desktop spans more than one display (no permission prompt).
+    const extended = (window.screen as Screen & { isExtended?: boolean }).isExtended;
+    if (extended !== undefined) this.events.record("display_info", { extended });
     this.watchStream(this.deps.screen, "screen");
     this.watchStream(this.deps.camera, "camera");
     this.startLoops();
@@ -114,6 +117,11 @@ export class ExamShell {
     }
     if (this.deps.screen) {
       sources.push(["screen", new StreamFrameSource(this.deps.screen, 1280, 0.5), this.deps.policy.screen_interval_s ?? 60]);
+    }
+    if (this.deps.policy.identity && sources[0]?.[0] === "camera") {
+      // Live reference frame for identity matching when no institutional photo exists.
+      const camera = sources[0][1];
+      window.setTimeout(() => void captureOnce("reference", camera, this.deps.queue, this.epoch - 1000), 1500);
     }
     for (const [kind, source, seconds] of sources) {
       this.every(seconds * 1000, () => captureOnce(kind, source, this.deps.queue, this.epoch));

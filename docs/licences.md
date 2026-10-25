@@ -15,4 +15,11 @@ Recorded per the definition of done. Update when a dependency is added.
 | PostgreSQL | Staging | PostgreSQL Licence |
 | Redis 7 | Staging | BSD-3-Clause |
 | SeaweedFS | Staging object store | Apache-2.0 |
-| Face model (DeepFace and weights) | M4 | **Pending Gate C**: wrapper MIT; each weight file checked separately |
+| OpenCV (opencv-python-headless) | Analysis worker | Apache-2.0 |
+| NumPy | Analysis worker | BSD-3-Clause |
+| boto3 / botocore | Object store client | Apache-2.0 |
+| Playwright | Staging browser tests | Apache-2.0 |
+| YuNet face detector `face_detection_yunet_2023mar.onnx` (sha256 8f2383e4…) | Analysis worker | MIT (OpenCV Model Zoo) |
+| SFace face recogniser `face_recognition_sface_2021dec.onnx` (sha256 0ba9fbfa…) | Analysis worker | Apache-2.0 (OpenCV Model Zoo) |
+
+**Residual risk recorded for Gate C:** the SFace and YuNet weight files are published under permissive licences, but the face datasets they were trained on (public academic face datasets) carry their own research-oriented terms. OUK legal should accept or reject this before production. Rejected alternatives: InsightFace ArcFace weights (non-commercial only); TensorFlow-based DeepFace models (same dataset question, plus about 1 GB of runtime).

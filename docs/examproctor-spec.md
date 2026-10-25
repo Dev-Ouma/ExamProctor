@@ -10,6 +10,7 @@ Source requirements: OUK/LTI/PROC/2026/001 (Learning Technologies & Innovations 
 | v0.1           | Initial architecture, AI pipeline, capacity, privacy, build plan                                                           |
 | v0.2           | Adds Phase 0 reverse engineering, draft API contract, data model, scoring, NFRs, test strategy, acceptance criteria, risks |
 | v0.2.1         | Product renamed to ExamProctor (plugin ids, headers, repo and file names updated)                                          |
+| v0.4           | M4: face model YuNet + SFace on OpenCV (licence-clean DeepFace options, no TensorFlow); admission photos as identity anchor with Moodle CRUD (page, ZIP, CLI, web services); analysis worker, flag rules, score v1; Gate C evaluation tool (`docs/gate-c.md`) |
 | v0.3.2         | OUK platform wishlist triaged (`docs/feature-triage.md`): network/device readiness, multi-monitor, optional paste block, chat, playback, summaries added to M2-M6; lockdown-style and profiling features not adopted, with reasons |
 | v0.3.1         | Moodle target corrected to 4.5.1+ on PHP 8.1 (OpenLearn); staging object store SeaweedFS (MinIO images no longer public) |
 | v0.3           | Reconciled with Phase 0 (delta D-01..D-21 approved): exam shell, server-verified gate, policy snapshot per attempt, strict/lenient mode, adaptive capture, new signals, Moodle-app block, async close, optional reference photos, open decisions resolved, sections 3.2 and 3.5 restored |
@@ -338,7 +339,7 @@ examproctor/
 | 1 | Moodle / PHP | Moodle 4.5.1+ (Build 20250131, version 2024100701.08) on PHP 8.1, as on OUK OpenLearn (`open.ac.ke`, the integration test site). Plugins require Moodle 4.5.0+ and support PHP 8.1-8.3 |
 | 2 | Hosting | KENET (Kenyan research network datacentre); data stays in Kenya |
 | 3 | Retention | 90 days after results are finalised; longer only under legal hold |
-| 4 | Face model | DeepFace wrapper; each underlying model's weight licence verified at Gate C before production |
+| 4 | Face model | YuNet (MIT) + SFace (Apache-2.0), the licence-clean models DeepFace offers, run directly on OpenCV; Gate C sign-off pending (`docs/gate-c.md`) |
 | 5 | Mobile | Web-only v1 (installable web app); native Android later |
 | 6 | DPIA owner | OUK (ICT/legal); appeals-policy signatory still to be named |
 | 7 | Degradation | **Open.** Proposal: continue the exam with a logged gap; never pause Moodle answers |

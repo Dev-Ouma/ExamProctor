@@ -83,9 +83,7 @@ class ConsentRequest(BaseModel):
 
 
 @router.post("/{session_id}/consent")
-async def consent(
-    body: ConsentRequest, session: SessionDep, store: StoreDep, settings: SettingsDep
-):
+async def consent(body: ConsentRequest, session: SessionDep, store: StoreDep, settings: SettingsDep):
     if not body.accepted:
         raise error(400, "consent_required", "consent must be accepted to continue")
     if body.text_version != settings.consent_text_version:
