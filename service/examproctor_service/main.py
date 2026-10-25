@@ -16,6 +16,7 @@ from . import __version__
 from .api import router as sessions_router
 from .config import Settings, get_settings
 from .evidence import router as evidence_router
+from .facecheck import router as facecheck_router
 from .health import run_checks
 from .live import router as live_router
 from .live_store import MemoryActionStore, MemoryBus, PgActionStore, RedisBus
@@ -124,6 +125,7 @@ def create_app(
     app.include_router(review_router)
     app.include_router(privacy_router)
     app.include_router(live_router)
+    app.include_router(facecheck_router)
     return app
 
 

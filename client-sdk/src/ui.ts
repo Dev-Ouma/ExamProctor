@@ -5,6 +5,7 @@ import { detectCapabilities } from "./capabilities";
 import { strings, type StringKey } from "./i18n";
 import { PrecheckController } from "./precheck";
 import { openQueue } from "./queue";
+import { StreamFrameSource } from "./capture";
 import { previewVideo } from "./selfview";
 import { ExamShell } from "./shell";
 
@@ -59,6 +60,32 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
   const checkButton = el("button", t.check, { type: "button", class: "btn btn-primary mt-2", hidden: "" });
   root.append(devices, checkButton, message);
 
+  // Live face check: shows the student what to fix (light, distance, one face). Advisory only.
+  const mountFaceCheck = (host: HTMLElement, stream: MediaStream) => {
+    const source = new StreamFrameSource(stream, 640, 0.8);
+    const status = el("div", "", { role: "status", "aria-live": "polite", class: "mt-1" });
+    const again = el("button", t.facecheck_retry, { type: "button", class: "btn btn-sm btn-secondary mt-1" });
+    host.append(status, again, el("small", t.facecheck_note, { class: "d-block text-muted" }));
+    const run = async () => {
+      again.disabled = true;
+      status.className = "mt-1";
+      status.textContent = t.facecheck_running;
+      // Give the camera a moment to adjust exposure after it starts.
+      await new Promise((r) => window.setTimeout(r, 800));
+      try {
+        const frame = await source.grab();
+        const result = frame ? await api.facecheck(frame) : { ok: false, reason: "unreadable" as const };
+        status.className = `mt-1 ${result.ok ? "text-success" : "text-danger"}`;
+        status.textContent = result.ok ? t.facecheck_ok : t[`facecheck_${result.reason ?? "no_face"}` as StringKey];
+      } catch {
+        status.textContent = t.error;
+      }
+      again.disabled = false;
+    };
+    again.addEventListener("click", () => void run());
+    void run();
+  };
+
   const deviceRow = (label: StringKey, run: () => Promise<{ status: string; stream?: MediaStream }>) => {
     const row = el("div", "", { class: "d-flex align-items-center gap-2 mb-2" });
     const button = el("button", t[label], { type: "button", class: "btn btn-secondary" });
@@ -70,6 +97,7 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
       button.disabled = result.status === "ok";
       if (label === "camera" && result.status === "ok" && result.stream) {
         preview.replaceChildren(previewVideo(result.stream, 240), el("small", t.preview_hint, { class: "d-block text-muted" }));
+        mountFaceCheck(preview, result.stream);
       }
       checkButton.hidden = controller.pendingDevices().length > 0;
     });

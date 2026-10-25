@@ -62,13 +62,17 @@
 			});
 			if (!response.ok) throw new ApiError(response.status, "put_failed", `object store returned ${response.status}`);
 		}
-		async call(method, path, body) {
-			const headers = { "Content-Type": "application/json" };
+		/** Live face check during the pre-check (advisory; nothing is stored). */
+		facecheck(jpeg) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/facecheck`, jpeg, "image/jpeg");
+		}
+		async call(method, path, body, contentType = "application/json") {
+			const headers = { "Content-Type": contentType };
 			if (this.token) headers.Authorization = `Bearer ${this.token}`;
 			const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
 				method,
 				headers,
-				body: body === void 0 ? void 0 : JSON.stringify(body)
+				body: body === void 0 ? void 0 : body instanceof ArrayBuffer ? body : JSON.stringify(body)
 			});
 			const json = await response.json().catch(() => ({}));
 			if (!response.ok) {
@@ -750,6 +754,16 @@
 		notice_warn: "Warning from the invigilator",
 		notice_message: "Message from the invigilator",
 		notice_ok: "OK",
+		facecheck_running: "Checking your face…",
+		facecheck_ok: "Face detected. You are ready.",
+		facecheck_retry: "Check again",
+		facecheck_unreadable: "The camera picture could not be read. Check the camera and try again.",
+		facecheck_too_dark: "It is too dark. Face a light or a window.",
+		facecheck_no_face: "No face found. Look at the camera with your whole face in view.",
+		facecheck_multiple_faces: "More than one face is visible. Only you should be in view.",
+		facecheck_face_too_small: "Your face is too small in the picture. Move closer to the camera.",
+		facecheck_blurry: "The picture is blurry. Hold still and wipe the camera.",
+		facecheck_note: "This check helps you; it does not stop you starting.",
 		paused: "The invigilator has paused your exam. Stay where you are; it will continue when they resume it. Your time keeps running in Moodle.",
 		terminated: "The invigilator has ended your exam session. Your saved answers have been submitted. A reviewer will look at what happened before any decision."
 	};
@@ -791,6 +805,16 @@
 		notice_warn: "Onyo kutoka kwa msimamizi",
 		notice_message: "Ujumbe kutoka kwa msimamizi",
 		notice_ok: "Sawa",
+		facecheck_running: "Tunaangalia uso wako…",
+		facecheck_ok: "Uso umeonekana. Uko tayari.",
+		facecheck_retry: "Angalia tena",
+		facecheck_unreadable: "Picha ya kamera haisomeki. Angalia kamera ujaribu tena.",
+		facecheck_too_dark: "Kuna giza sana. Elekea mwanga au dirisha.",
+		facecheck_no_face: "Hakuna uso ulioonekana. Tazama kamera uso wako wote ukionekana.",
+		facecheck_multiple_faces: "Zaidi ya uso mmoja unaonekana. Ni wewe tu unapaswa kuonekana.",
+		facecheck_face_too_small: "Uso wako ni mdogo sana kwenye picha. Sogea karibu na kamera.",
+		facecheck_blurry: "Picha haiko wazi. Tulia na usafishe kamera.",
+		facecheck_note: "Ukaguzi huu ni wa kukusaidia; haukuzuii kuanza.",
 		paused: "Msimamizi amesimamisha mtihani wako. Kaa ulipo; utaendelea atakapoufungua tena. Muda wako unaendelea kuhesabiwa kwenye Moodle.",
 		terminated: "Msimamizi amemaliza kipindi chako cha mtihani. Majibu yako yaliyohifadhiwa yamewasilishwa. Mkaguzi ataangalia kilichotokea kabla ya uamuzi wowote."
 	};
@@ -849,6 +873,39 @@
 			hidden: ""
 		});
 		root.append(devices, checkButton, message);
+		const mountFaceCheck = (host, stream) => {
+			const source = new StreamFrameSource(stream, 640, .8);
+			const status = el("div", "", {
+				role: "status",
+				"aria-live": "polite",
+				class: "mt-1"
+			});
+			const again = el("button", t.facecheck_retry, {
+				type: "button",
+				class: "btn btn-sm btn-secondary mt-1"
+			});
+			host.append(status, again, el("small", t.facecheck_note, { class: "d-block text-muted" }));
+			const run = async () => {
+				again.disabled = true;
+				status.className = "mt-1";
+				status.textContent = t.facecheck_running;
+				await new Promise((r) => window.setTimeout(r, 800));
+				try {
+					const frame = await source.grab();
+					const result = frame ? await api.facecheck(frame) : {
+						ok: false,
+						reason: "unreadable"
+					};
+					status.className = `mt-1 ${result.ok ? "text-success" : "text-danger"}`;
+					status.textContent = result.ok ? t.facecheck_ok : t[`facecheck_${result.reason ?? "no_face"}`];
+				} catch {
+					status.textContent = t.error;
+				}
+				again.disabled = false;
+			};
+			again.addEventListener("click", () => void run());
+			run();
+		};
 		const deviceRow = (label, run) => {
 			const row = el("div", "", { class: "d-flex align-items-center gap-2 mb-2" });
 			const button = el("button", t[label], {
@@ -861,7 +918,10 @@
 				const result = await run();
 				state.textContent = result.status === "ok" ? t.ok : t[result.status] ?? result.status;
 				button.disabled = result.status === "ok";
-				if (label === "camera" && result.status === "ok" && result.stream) preview.replaceChildren(previewVideo(result.stream, 240), el("small", t.preview_hint, { class: "d-block text-muted" }));
+				if (label === "camera" && result.status === "ok" && result.stream) {
+					preview.replaceChildren(previewVideo(result.stream, 240), el("small", t.preview_hint, { class: "d-block text-muted" }));
+					mountFaceCheck(preview, result.stream);
+				}
 				checkButton.hidden = controller.pendingDevices().length > 0;
 			});
 			const preview = el("div", "", { class: "mb-2" });

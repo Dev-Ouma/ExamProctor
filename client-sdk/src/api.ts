@@ -68,6 +68,14 @@ export class ApiError extends Error {
 
 type Fetch = typeof fetch;
 
+export interface FaceCheck {
+  ok: boolean;
+  reason: "unreadable" | "too_dark" | "no_face" | "multiple_faces" | "face_too_small" | "blurry" | null;
+  faces: number;
+  face_px: number;
+  brightness: number;
+}
+
 /** An invigilator action as the student sees it. */
 export interface Notice {
   id: number;
@@ -148,15 +156,20 @@ export class SessionApi {
     }
   }
 
-  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+  /** Live face check during the pre-check (advisory; nothing is stored). */
+  facecheck(jpeg: ArrayBuffer): Promise<FaceCheck> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/facecheck`, jpeg, "image/jpeg");
+  }
+
+  private async call<T>(method: string, path: string, body?: unknown, contentType = "application/json"): Promise<T> {
+    const headers: Record<string, string> = { "Content-Type": contentType };
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
     }
     const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : body instanceof ArrayBuffer ? body : JSON.stringify(body),
     });
     const json = await response.json().catch(() => ({}));
     if (!response.ok) {
