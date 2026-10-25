@@ -58,6 +58,20 @@ if ($hassiteconfig) {
         '',
         PARAM_ALPHANUMEXT
     ));
+    $settings->add(new admin_setting_configtext(
+        'local_examproctor/camerainterval',
+        get_string('camerainterval', 'local_examproctor'),
+        get_string('camerainterval_desc', 'local_examproctor'),
+        30,
+        PARAM_INT
+    ));
+    $settings->add(new admin_setting_configtext(
+        'local_examproctor/screeninterval',
+        get_string('screeninterval', 'local_examproctor'),
+        get_string('screeninterval_desc', 'local_examproctor'),
+        60,
+        PARAM_INT
+    ));
     $settings->add(new admin_setting_configpasswordunmask(
         'local_examproctor/signingkey',
         get_string('signingkey', 'local_examproctor'),

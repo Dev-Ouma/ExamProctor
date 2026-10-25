@@ -35,6 +35,30 @@
 		status() {
 			return this.call("GET", `/v1/sessions/${this.sessionId}`);
 		}
+		presign(body) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/uploads/presign`, body);
+		}
+		complete(key) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/uploads/complete`, { key });
+		}
+		events(events) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/events`, { events });
+		}
+		heartbeat(body) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/heartbeat`, body);
+		}
+		finish() {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/finish`, {});
+		}
+		/** PUT bytes to a presigned object-store URL. */
+		async put(url, data, headers = {}) {
+			const response = await this.fetchImpl(url, {
+				method: "PUT",
+				body: data,
+				headers
+			});
+			if (!response.ok) throw new ApiError(response.status, "put_failed", `object store returned ${response.status}`);
+		}
 		async call(method, path, body) {
 			const headers = { "Content-Type": "application/json" };
 			if (this.token) headers.Authorization = `Bearer ${this.token}`;
@@ -152,11 +176,9 @@
 				network_ok: true
 			};
 		}
-		/** Ask the service to decide, then wait until it has told Moodle. Streams are released. */
+		/** Ask the service to decide, then wait until it has told Moodle. Streams stay open for capture. */
 		async submit() {
 			let status = await this.deps.api.precheck(this.results());
-			stopStream(this.camera.stream);
-			stopStream(this.screen.stream);
 			if (status.status === "blocked") return {
 				kind: "blocked",
 				reasons: status.reasons
@@ -171,6 +193,361 @@
 				status = await this.deps.api.status();
 			}
 			return { kind: "ready" };
+		}
+	};
+	// src/capture.ts
+	async function sha256Hex(data) {
+		const digest = await crypto.subtle.digest("SHA-256", data);
+		return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+	}
+	/** Snapshot from a MediaStream via a hidden video element and a canvas. */
+	var StreamFrameSource = class {
+		constructor(stream, maxWidth, quality) {
+			this.stream = stream;
+			this.maxWidth = maxWidth;
+			this.quality = quality;
+			this.video = document.createElement("video");
+			this.video.muted = true;
+			this.video.playsInline = true;
+			this.video.srcObject = stream;
+			this.video.play().catch(() => void 0);
+		}
+		get live() {
+			return this.stream.getVideoTracks().some((t) => t.readyState === "live");
+		}
+		async grab() {
+			if (!this.live || this.video.videoWidth === 0) return null;
+			const scale = Math.min(1, this.maxWidth / this.video.videoWidth);
+			const canvas = document.createElement("canvas");
+			canvas.width = Math.round(this.video.videoWidth * scale);
+			canvas.height = Math.round(this.video.videoHeight * scale);
+			canvas.getContext("2d").drawImage(this.video, 0, 0, canvas.width, canvas.height);
+			const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", this.quality));
+			return blob ? blob.arrayBuffer() : null;
+		}
+	};
+	/**
+	* Sequence numbers come from elapsed seconds since the session epoch, so they stay unique and
+	* increasing across a shell reload without any stored counter.
+	*/
+	function sequenceFor(epochMs, nowMs) {
+		return Math.max(0, Math.floor((nowMs - epochMs) / 1e3));
+	}
+	async function captureOnce(kind, source, queue, epochMs, now = Date.now) {
+		const data = await source.grab();
+		if (!data) return false;
+		const t = now();
+		const seq = sequenceFor(epochMs, t);
+		await queue.put({
+			id: `${kind}-${seq}`,
+			kind,
+			seq,
+			data,
+			sha256: await sha256Hex(data),
+			capturedAt: new Date(t).toISOString(),
+			attempts: 0
+		});
+		return true;
+	}
+	// src/events.ts
+	var EventCollector = class {
+		constructor(api) {
+			this.api = api;
+			this.buffer = [];
+			this.detachers = [];
+		}
+		record(type, data = {}) {
+			this.buffer.push({
+				type,
+				ts: (/* @__PURE__ */ new Date()).toISOString(),
+				data
+			});
+			if (this.buffer.length > 2e3) this.buffer.splice(0, this.buffer.length - 2e3);
+		}
+		/** Listen on a window (outer shell or the framed Moodle page). */
+		attach(win) {
+			const doc = win.document;
+			const questionOf = (target) => {
+				const q = (target instanceof win.Element ? target : null)?.closest(".que");
+				return q?.id ? { question: q.id } : {};
+			};
+			const on = (target, type, fn) => {
+				target.addEventListener(type, fn, true);
+				this.detachers.push(() => target.removeEventListener(type, fn, true));
+			};
+			on(win, "blur", () => this.record("blur"));
+			on(win, "focus", () => this.record("focus"));
+			on(doc, "visibilitychange", () => this.record(doc.hidden ? "visibility_hidden" : "visibility_visible"));
+			on(doc, "fullscreenchange", () => !doc.fullscreenElement && this.record("fullscreen_exit"));
+			for (const type of [
+				"copy",
+				"cut",
+				"paste",
+				"contextmenu"
+			]) on(doc, type, (e) => this.record(type, questionOf(e.target)));
+			on(win, "online", () => this.record("online"));
+			on(win, "offline", () => this.record("offline"));
+			on(win, "resize", () => this.record("resize", {
+				w: win.innerWidth,
+				h: win.innerHeight
+			}));
+			doc.querySelectorAll(".que[id]").forEach((q) => this.record("question_shown", { question: q.id }));
+		}
+		detachAll() {
+			this.detachers.splice(0).forEach((d) => d());
+		}
+		/** Send buffered events. On failure they stay buffered for the next flush. */
+		async flush() {
+			if (this.buffer.length === 0) return 0;
+			const batch = this.buffer.slice(0, 500);
+			try {
+				await this.api.events(batch);
+				this.buffer.splice(0, batch.length);
+				return batch.length;
+			} catch {
+				return 0;
+			}
+		}
+		get pending() {
+			return this.buffer.length;
+		}
+	};
+	// src/queue.ts
+	var MemoryQueue = class {
+		constructor() {
+			this.items = /* @__PURE__ */ new Map();
+		}
+		async put(item) {
+			this.items.set(item.id, item);
+		}
+		async oldest(limit) {
+			return [...this.items.values()].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt)).slice(0, limit);
+		}
+		async remove(id) {
+			this.items.delete(id);
+		}
+		async size() {
+			return this.items.size;
+		}
+	};
+	var STORE = "uploads";
+	function request(req) {
+		return new Promise((resolve, reject) => {
+			req.onsuccess = () => resolve(req.result);
+			req.onerror = () => reject(req.error);
+		});
+	}
+	var IndexedDbQueue = class IndexedDbQueue {
+		constructor(db) {
+			this.db = db;
+		}
+		static async open(name) {
+			const req = indexedDB.open(name, 1);
+			req.onupgradeneeded = () => {
+				req.result.createObjectStore(STORE, { keyPath: "id" }).createIndex("capturedAt", "capturedAt");
+			};
+			return new IndexedDbQueue(await request(req));
+		}
+		store(mode) {
+			return this.db.transaction(STORE, mode).objectStore(STORE);
+		}
+		async put(item) {
+			await request(this.store("readwrite").put(item));
+		}
+		async oldest(limit) {
+			return request(this.store("readonly").index("capturedAt").getAll(null, limit));
+		}
+		async remove(id) {
+			await request(this.store("readwrite").delete(id));
+		}
+		async size() {
+			return request(this.store("readonly").count());
+		}
+	};
+	/** IndexedDB queue per session, falling back to memory (private windows, old browsers). */
+	async function openQueue(sessionId) {
+		try {
+			if (typeof indexedDB !== "undefined") return await IndexedDbQueue.open(`examproctor-${sessionId}`);
+		} catch {}
+		return new MemoryQueue();
+	}
+	// src/uploader.ts
+	/** Drains the upload queue: presign -> PUT -> complete, with backoff while offline. */
+	/** Errors that will never succeed on retry: drop the item and report it. */
+	var PERMANENT = /* @__PURE__ */ new Set([
+		"too_large",
+		"kind_not_in_policy",
+		"session_purged",
+		"seq_conflict",
+		"bad_sha256"
+	]);
+	var Uploader = class {
+		constructor(deps) {
+			this.deps = deps;
+			this.failures = 0;
+		}
+		/** Delay before the next drain, in ms: 1 s when healthy, doubling to 60 s while failing. */
+		get nextDelayMs() {
+			return this.failures === 0 ? 1e3 : Math.min(1e3 * 2 ** this.failures, 6e4);
+		}
+		/** Upload what is queued. Stops at the first network failure (keeps order, avoids hammering). */
+		async drain(batch = 5) {
+			let done = 0;
+			for (const item of await this.deps.queue.oldest(batch)) try {
+				const presigned = await this.deps.api.presign({
+					kind: item.kind,
+					bytes: item.data.byteLength,
+					sha256: item.sha256,
+					seq: item.seq,
+					captured_at: item.capturedAt
+				});
+				if (!presigned.already_uploaded) {
+					await this.deps.api.put(presigned.url, item.data, presigned.headers);
+					await this.deps.api.complete(presigned.key);
+				}
+				await this.deps.queue.remove(item.id);
+				done += 1;
+				this.failures = 0;
+			} catch (error) {
+				if (error instanceof ApiError && PERMANENT.has(error.code)) {
+					await this.deps.queue.remove(item.id);
+					this.deps.onDropped?.(item.id, error.code);
+					continue;
+				}
+				this.failures += 1;
+				await this.deps.queue.put({
+					...item,
+					attempts: item.attempts + 1
+				});
+				break;
+			}
+			return done;
+		}
+	};
+	// src/shell.ts
+	var ATTEMPT_PAGES = /\/mod\/quiz\/(attempt|summary|startattempt|processattempt)\.php$/;
+	var ExamShell = class {
+		constructor(deps) {
+			this.deps = deps;
+			this.timers = [];
+			this.epoch = Date.now();
+			this.stopped = false;
+			this.frameBroken = false;
+			this.events = new EventCollector(deps.api);
+			this.uploader = new Uploader({
+				api: deps.api,
+				queue: deps.queue,
+				onDropped: (id, code) => this.events.record("capture_error", {
+					id,
+					code
+				})
+			});
+		}
+		/** Submit the (already validated) preflight form into the shell frame and start capture. */
+		start(form) {
+			const name = "examproctor-shell-frame";
+			const overlay = document.createElement("div");
+			overlay.id = "examproctor-shell";
+			overlay.setAttribute("style", "position:fixed;inset:0;z-index:100000;background:#fff;display:flex;flex-direction:column");
+			this.status = document.createElement("div");
+			this.status.setAttribute("role", "status");
+			this.status.setAttribute("style", `padding:4px 12px;font:14px sans-serif;background:${this.deps.staging ? "#ff7f50" : "#037b90"};color:#fff`);
+			this.status.textContent = this.deps.text.capturing;
+			this.iframe = document.createElement("iframe");
+			this.iframe.name = name;
+			this.iframe.title = "Quiz";
+			this.iframe.setAttribute("style", "flex:1;border:0;width:100%");
+			overlay.append(this.status, this.iframe);
+			document.body.append(overlay);
+			this.iframe.addEventListener("load", () => this.onFrameLoad());
+			form.target = name;
+			HTMLFormElement.prototype.submit.call(form);
+			this.events.attach(window);
+			this.events.record("shell_loaded");
+			this.watchStream(this.deps.screen, "screen");
+			this.watchStream(this.deps.camera, "camera");
+			this.startLoops();
+		}
+		watchStream(stream, kind) {
+			stream?.getVideoTracks().forEach((track) => track.addEventListener("ended", () => {
+				this.events.record("stream_ended", { kind });
+				if (kind === "screen" && this.status) this.status.textContent = this.deps.text.screenStopped;
+			}));
+		}
+		onFrameLoad() {
+			const win = this.iframe?.contentWindow;
+			if (!win) return;
+			let href;
+			try {
+				href = win.location.href;
+			} catch {
+				this.frameBroken = true;
+				this.events.record("connectivity_gap", { frame: "unreadable" });
+				if (this.status) this.status.textContent = this.deps.text.reconnecting;
+				return;
+			}
+			if (ATTEMPT_PAGES.test(new URL(href).pathname)) {
+				this.frameBroken = false;
+				this.lastGoodUrl = href;
+				if (this.status) this.status.textContent = this.deps.text.capturing;
+				this.events.attach(win);
+				return;
+			}
+			this.events.record("attempt_left", { path: new URL(href).pathname });
+			if (this.status) this.status.textContent = this.deps.text.leaving;
+			this.stop().finally(() => window.location.assign(href));
+		}
+		every(ms, fn) {
+			this.timers.push(window.setInterval(() => void fn(), ms));
+		}
+		startLoops() {
+			const sources = [];
+			if (this.deps.camera) sources.push([
+				"camera",
+				new StreamFrameSource(this.deps.camera, 640, .6),
+				this.deps.policy.camera_interval_s ?? 30
+			]);
+			if (this.deps.screen) sources.push([
+				"screen",
+				new StreamFrameSource(this.deps.screen, 1280, .5),
+				this.deps.policy.screen_interval_s ?? 60
+			]);
+			for (const [kind, source, seconds] of sources) this.every(seconds * 1e3, () => captureOnce(kind, source, this.deps.queue, this.epoch));
+			const drain = async () => {
+				if (this.stopped) return;
+				await this.uploader.drain();
+				this.timers.push(window.setTimeout(drain, this.uploader.nextDelayMs));
+			};
+			drain();
+			this.every(5e3, () => this.events.flush());
+			const recover = () => {
+				if (this.frameBroken && navigator.onLine && this.iframe && this.lastGoodUrl) {
+					this.frameBroken = false;
+					this.iframe.src = this.lastGoodUrl;
+				}
+			};
+			window.addEventListener("online", recover);
+			this.every(5e3, recover);
+			this.every(1e4, async () => this.deps.api.heartbeat({
+				queued_uploads: await this.deps.queue.size(),
+				camera_live: this.deps.camera?.getVideoTracks().some((t) => t.readyState === "live") ?? null,
+				screen_live: this.deps.screen?.getVideoTracks().some((t) => t.readyState === "live") ?? null
+			}).catch(() => this.events.record("connectivity_gap")));
+		}
+		/** Stop capture, try to send what is queued (up to 10 s), close the session, release devices. */
+		async stop() {
+			if (this.stopped) return;
+			this.stopped = true;
+			this.timers.splice(0).forEach((t) => {
+				clearInterval(t);
+				clearTimeout(t);
+			});
+			const deadline = Date.now() + 1e4;
+			while (Date.now() < deadline && await this.deps.queue.size() > 0) if (await this.uploader.drain(10) === 0) break;
+			await this.events.flush();
+			await this.deps.api.finish().catch(() => void 0);
+			this.events.detachAll();
+			[this.deps.camera, this.deps.screen].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
 		}
 	};
 	// src/i18n.ts
@@ -199,7 +576,11 @@
 		reason_screen_missing: "Screen sharing failed.",
 		reason_screen_unsupported: "This device cannot share its screen. Use a computer.",
 		reason_screen_not_whole_display: "Share your entire screen, not a window or a tab.",
-		reason_network_unavailable: "The connection to the proctoring service failed."
+		reason_network_unavailable: "The connection to the proctoring service failed.",
+		capturing: "ExamProctor is on: camera and screen snapshots are being taken.",
+		screen_stopped: "Screen sharing has stopped. Reload the quiz page to share your screen again.",
+		leaving: "Saving proctoring data…",
+		reconnecting: "Connection lost. Your answers are safe in Moodle; the quiz page will reload when you are back online."
 	};
 	var sw = {
 		title: "Kabla ya kuanza",
@@ -225,7 +606,11 @@
 		reason_screen_missing: "Kushiriki skrini kumeshindwa.",
 		reason_screen_unsupported: "Kifaa hiki hakiwezi kushiriki skrini. Tumia kompyuta.",
 		reason_screen_not_whole_display: "Shiriki skrini nzima, si dirisha au kichupo.",
-		reason_network_unavailable: "Muunganisho na huduma ya usimamizi umeshindwa."
+		reason_network_unavailable: "Muunganisho na huduma ya usimamizi umeshindwa.",
+		capturing: "ExamProctor imewashwa: picha za kamera na skrini zinachukuliwa.",
+		screen_stopped: "Kushiriki skrini kumesimama. Pakia upya ukurasa wa jaribio ili kushiriki skrini tena.",
+		leaving: "Tunahifadhi data ya usimamizi…",
+		reconnecting: "Muunganisho umepotea. Majibu yako yako salama kwenye Moodle; ukurasa wa jaribio utapakia upya mtandao ukirudi."
 	};
 	function strings(lang) {
 		return lang.toLowerCase().startsWith("sw") ? sw : en;
@@ -242,10 +627,12 @@
 		const root = document.querySelector(options.container);
 		if (!root) return;
 		const t = strings(options.lang);
-		const submit = root.closest("form")?.querySelector("[type=submit][name=submitbutton]");
+		const form = root.closest("form");
+		const submit = form?.querySelector("[type=submit][name=submitbutton]");
 		if (submit) submit.disabled = true;
+		const api = new SessionApi(options.serviceUrl);
 		const controller = new PrecheckController({
-			api: new SessionApi(options.serviceUrl),
+			api,
 			media: navigator.mediaDevices,
 			caps: detectCapabilities()
 		});
@@ -318,6 +705,24 @@
 				if (outcome.kind === "ready") {
 					message.textContent = t.ready;
 					if (submit) submit.disabled = false;
+					const queue = await openQueue(controller.session.session_id);
+					form?.addEventListener("submit", (event) => {
+						event.preventDefault();
+						new ExamShell({
+							api,
+							policy: controller.policy,
+							queue,
+							camera: controller.camera.stream,
+							screen: controller.screen.stream,
+							staging: options.staging,
+							text: {
+								capturing: t.capturing,
+								screenStopped: t.screen_stopped,
+								leaving: t.leaving,
+								reconnecting: t.reconnecting
+							}
+						}).start(form);
+					}, { once: true });
 					return;
 				}
 				if (outcome.kind === "blocked") {
@@ -334,11 +739,19 @@
 		});
 	}
 	// src/index.ts
-	var SDK_VERSION = "0.2.0";
+	var SDK_VERSION = "0.3.0";
 	exports.ApiError = ApiError;
+	exports.EventCollector = EventCollector;
+	exports.ExamShell = ExamShell;
+	exports.MemoryQueue = MemoryQueue;
 	exports.PrecheckController = PrecheckController;
 	exports.SDK_VERSION = SDK_VERSION;
 	exports.SessionApi = SessionApi;
+	exports.Uploader = Uploader;
+	exports.captureOnce = captureOnce;
 	exports.detectCapabilities = detectCapabilities;
 	exports.mountPrecheck = mountPrecheck;
+	exports.openQueue = openQueue;
+	exports.sequenceFor = sequenceFor;
+	exports.sha256Hex = sha256Hex;
 });

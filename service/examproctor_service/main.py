@@ -15,14 +15,21 @@ from fastapi.responses import JSONResponse
 from . import __version__
 from .api import router as sessions_router
 from .config import Settings, get_settings
+from .evidence import router as evidence_router
 from .health import run_checks
+from .objectstore import ObjectStore, S3ObjectStore
+from .retention import loop as retention_loop
 from .store import PgStore, Store
 from .webhooks import retry_loop
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
-def create_app(store: Store | None = None, http: httpx.AsyncClient | None = None) -> FastAPI:
+def create_app(
+    store: Store | None = None,
+    http: httpx.AsyncClient | None = None,
+    objects: ObjectStore | None = None,
+) -> FastAPI:
     """Build the app. Tests pass an in-memory store and a mock HTTP client."""
     settings = get_settings()
 
@@ -31,16 +38,21 @@ def create_app(store: Store | None = None, http: httpx.AsyncClient | None = None
         owned_store = store is None
         app.state.store = store or await PgStore.connect(settings.database_url)
         app.state.http = http or httpx.AsyncClient(timeout=10)
-        retries = None
+        app.state.objects = objects or S3ObjectStore(settings)
+        background = []
         if owned_store:
-            retries = asyncio.create_task(retry_loop(app.state.store, settings, app.state.http))
+            await app.state.objects.ensure_bucket()
+            background = [
+                asyncio.create_task(retry_loop(app.state.store, settings, app.state.http)),
+                asyncio.create_task(retention_loop(app.state.store, app.state.objects, settings)),
+            ]
         try:
             yield
         finally:
-            if retries:
-                retries.cancel()
+            for task in background:
+                task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
-                    await retries
+                    await task
             if owned_store:
                 await app.state.store.close()
             if http is None:
@@ -87,6 +99,7 @@ def create_app(store: Store | None = None, http: httpx.AsyncClient | None = None
         )
 
     app.include_router(sessions_router)
+    app.include_router(evidence_router)
     return app
 
 

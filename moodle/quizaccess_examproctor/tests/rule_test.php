@@ -72,7 +72,11 @@ final class rule_test extends \advanced_testcase {
         $quiz = $this->proctored_quiz(['strict' => 1]);
         $rule = \quizaccess_examproctor::make(quiz_settings::create($quiz->id), time(), false);
 
-        $this->assertSame(['camera' => true, 'screen' => true, 'identity' => false, 'strict' => true], $rule->policy());
+        $this->assertSame(
+            ['camera' => true, 'screen' => true, 'identity' => false, 'strict' => true,
+                'camera_interval_s' => 30, 'screen_interval_s' => 60],
+            $rule->policy()
+        );
     }
 
     public function test_start_needs_a_signed_ready_record(): void {

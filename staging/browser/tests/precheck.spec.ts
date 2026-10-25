@@ -1,21 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-const PASSWORD = process.env.SEED_USER_PASSWORD ?? "Staging#2026";
-
-async function login(page, username: string) {
-  await page.goto("/login/index.php");
-  await page.fill("#username", username);
-  await page.fill("#password", PASSWORD);
-  await page.click("#loginbtn");
-  await expect(page).not.toHaveURL(/login\/index\.php/);
-}
-
-async function openQuiz(page) {
-  await page.goto("/course/search.php?search=EP-STAGING-101");
-  await page.click("text=ExamProctor Staging 101");
-  const quiz = page.locator('a[href*="/mod/quiz/view.php"]', { hasText: "Proctored practice quiz" }).first();
-  await page.goto((await quiz.getAttribute("href"))!);
-}
+import { login, openQuiz } from "./helpers";
 
 test("student passes the ExamProctor checks and the attempt starts", async ({ page }) => {
   await login(page, process.env.STUDENT ?? "epstudent02");
@@ -41,7 +25,8 @@ test("student passes the ExamProctor checks and the attempt starts", async ({ pa
   }
   await expect(start).toBeEnabled();
   await start.click();
-  await expect(page).toHaveURL(/\/mod\/quiz\/attempt\.php/);
+  // The attempt runs inside the exam shell frame.
+  await expect(page.frameLocator("#examproctor-shell iframe").locator(".que").first()).toBeVisible({ timeout: 30_000 });
 });
 
 test("forging the Start click without checks is refused by Moodle", async ({ page }) => {

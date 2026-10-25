@@ -64,6 +64,18 @@ class config {
     }
 
     /**
+     * Snapshot intervals in seconds, at least 5.
+     *
+     * @return array{camera_interval_s: int, screen_interval_s: int}
+     */
+    public static function intervals(): array {
+        return [
+            'camera_interval_s' => max(5, (int) (get_config('local_examproctor', 'camerainterval') ?: 30)),
+            'screen_interval_s' => max(5, (int) (get_config('local_examproctor', 'screeninterval') ?: 60)),
+        ];
+    }
+
+    /**
      * Shared secret for launch tokens and webhooks.
      *
      * @return string

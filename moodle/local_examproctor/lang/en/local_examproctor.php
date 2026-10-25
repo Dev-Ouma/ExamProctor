@@ -26,6 +26,8 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['appid'] = 'Application ID';
 $string['appid_desc'] = 'Identifier of this Moodle site at the ExamProctor service.';
+$string['camerainterval'] = 'Camera snapshot interval (seconds)';
+$string['camerainterval_desc'] = 'Seconds between camera snapshots. Default 30. Minimum 5.';
 $string['examproctor:configure'] = 'Configure ExamProctor for a quiz';
 $string['examproctor:exportevidence'] = 'Export ExamProctor evidence';
 $string['examproctor:invigilate'] = 'Invigilate live ExamProctor sessions';
@@ -52,6 +54,8 @@ $string['privacy:metadata:ready:userid'] = 'The student.';
 $string['privacy:metadata:service'] = 'The ExamProctor service, hosted by OUK, receives the student and quiz identifiers to run proctoring.';
 $string['privacy:metadata:service:quizid'] = 'The quiz.';
 $string['privacy:metadata:service:userid'] = 'The Moodle user id.';
+$string['screeninterval'] = 'Screen snapshot interval (seconds)';
+$string['screeninterval_desc'] = 'Seconds between screen snapshots on computers. Default 60. Minimum 5. An extra snapshot is taken when the student leaves the quiz page.';
 $string['serviceurl'] = 'Service URL';
 $string['serviceurl_desc'] = 'Base URL of the ExamProctor service, for example https://proctor.example.ac.ke.';
 $string['signingkey'] = 'Signing key';

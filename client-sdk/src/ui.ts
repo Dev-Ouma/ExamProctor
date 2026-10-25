@@ -4,6 +4,8 @@ import { ApiError, SessionApi } from "./api";
 import { detectCapabilities } from "./capabilities";
 import { strings, type StringKey } from "./i18n";
 import { PrecheckController } from "./precheck";
+import { openQueue } from "./queue";
+import { ExamShell } from "./shell";
 
 export interface MountOptions {
   container: string;
@@ -28,8 +30,9 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
   const submit = form?.querySelector<HTMLInputElement | HTMLButtonElement>("[type=submit][name=submitbutton]");
   if (submit) submit.disabled = true;
 
+  const api = new SessionApi(options.serviceUrl);
   const controller = new PrecheckController({
-    api: new SessionApi(options.serviceUrl),
+    api,
     media: navigator.mediaDevices,
     caps: detectCapabilities(),
   });
@@ -94,6 +97,23 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
       if (outcome.kind === "ready") {
         message.textContent = t.ready;
         if (submit) submit.disabled = false;
+        const queue = await openQueue(controller.session!.session_id);
+        form?.addEventListener(
+          "submit",
+          (event) => {
+            event.preventDefault();
+            new ExamShell({
+              api,
+              policy: controller.policy,
+              queue,
+              camera: controller.camera.stream,
+              screen: controller.screen.stream,
+              staging: options.staging,
+              text: { capturing: t.capturing, screenStopped: t.screen_stopped, leaving: t.leaving, reconnecting: t.reconnecting },
+            }).start(form);
+          },
+          { once: true },
+        );
         return;
       }
       if (outcome.kind === "blocked") {

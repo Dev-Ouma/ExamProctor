@@ -51,7 +51,7 @@ class quizaccess_examproctor extends access_rule_base {
     }
 
     /**
-     * Policy sent to the service in the launch token.
+     * Policy sent to the service in the launch token: quiz switches plus site capture intervals.
      *
      * @return array
      */
@@ -60,7 +60,7 @@ class quizaccess_examproctor extends access_rule_base {
         foreach (self::SWITCHES as $name) {
             $policy[$name] = !empty($this->quiz->{'examproctor_' . $name});
         }
-        return $policy;
+        return $policy + config::intervals();
     }
 
     /**

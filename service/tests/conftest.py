@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from examproctor_service.config import Settings, get_settings
 from examproctor_service.main import create_app
+from examproctor_service.objectstore import MemoryObjectStore
 from examproctor_service.store import MemoryStore
 from examproctor_service.webhooks import sign
 
@@ -57,9 +58,14 @@ def store():
 
 
 @pytest.fixture
-def client(settings, store, moodle):
+def objects():
+    return MemoryObjectStore()
+
+
+@pytest.fixture
+def client(settings, store, moodle, objects):
     http = httpx.AsyncClient(transport=httpx.MockTransport(moodle.handler))
-    with TestClient(create_app(store=store, http=http)) as test_client:
+    with TestClient(create_app(store=store, http=http, objects=objects)) as test_client:
         yield test_client
 
 

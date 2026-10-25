@@ -75,11 +75,9 @@ export class PrecheckController {
     };
   }
 
-  /** Ask the service to decide, then wait until it has told Moodle. Streams are released. */
+  /** Ask the service to decide, then wait until it has told Moodle. Streams stay open for capture. */
   async submit(): Promise<Outcome> {
     let status: SessionStatus = await this.deps.api.precheck(this.results());
-    stopStream(this.camera.stream);
-    stopStream(this.screen.stream);
     if (status.status === "blocked") return { kind: "blocked", reasons: status.reasons };
     const sleep = this.deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     const interval = this.deps.pollIntervalMs ?? 2000;

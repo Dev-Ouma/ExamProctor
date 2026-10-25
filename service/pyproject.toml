@@ -11,6 +11,7 @@ dependencies = [
     "redis>=5.0",
     "httpx>=0.27",
     "pyjwt>=2.9",
+    "boto3>=1.35",
 ]
 
 [dependency-groups]
@@ -37,7 +38,7 @@ select = ["E", "F", "I", "B", "UP", "S", "ASYNC"]
 ignore = ["S101"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106"]
+"tests/*" = ["S105", "S106", "E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

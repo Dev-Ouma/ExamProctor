@@ -10,10 +10,12 @@ staging/.env:
 		v=$$(openssl rand -hex 16); sed -i.bak "s/^$$k=.*/$$k=$$v/" staging/.env; done; rm -f staging/.env.bak
 	@echo "Generated staging/.env with random passwords (admin password: MOODLE_ADMIN_PASSWORD)."
 
-staging/examproctor.secrets:  ## Shared Moodle<->service signing key and the service's session key.
-	@umask 077; { echo "EXAMPROCTOR_SHARED_SECRET=$$(openssl rand -hex 32)"; \
-		echo "EXAMPROCTOR_SESSION_KEY=$$(openssl rand -hex 32)"; } > staging/examproctor.secrets
-	@echo "Generated staging/examproctor.secrets."
+staging/examproctor.secrets: FORCE  ## Generated secrets; missing keys are added, existing ones kept.
+	@umask 077; touch staging/examproctor.secrets; \
+	for k in EXAMPROCTOR_SHARED_SECRET EXAMPROCTOR_SESSION_KEY EXAMPROCTOR_S3_ACCESS_KEY EXAMPROCTOR_S3_SECRET_KEY; do \
+		grep -q "^$$k=" staging/examproctor.secrets || echo "$$k=$$(openssl rand -hex 24)" >> staging/examproctor.secrets; done
+
+FORCE:
 
 up: staging/.env staging/examproctor.secrets  ## Build and start the whole stack, wait until healthy, then seed.
 	$(COMPOSE) up -d --build --wait --wait-timeout 900
@@ -28,7 +30,7 @@ reset:  ## Destroy all staging data volumes.
 
 seed:
 	$(MOODLE_EXEC) php /opt/seed/seed.php
-	$(MOODLE_EXEC) sh -c 'php admin/cli/cfg.php --component=local_examproctor --name=serviceurl --set="$$EXAMPROCTOR_PUBLIC_URL" && php admin/cli/cfg.php --component=local_examproctor --name=signingkey --set="$$EXAMPROCTOR_SHARED_SECRET"'
+	$(MOODLE_EXEC) sh -c 'php admin/cli/cfg.php --component=local_examproctor --name=serviceurl --set="$$EXAMPROCTOR_PUBLIC_URL" && php admin/cli/cfg.php --component=local_examproctor --name=signingkey --set="$$EXAMPROCTOR_SHARED_SECRET" && php admin/cli/cfg.php --component=local_examproctor --name=camerainterval --set=10 && php admin/cli/cfg.php --component=local_examproctor --name=screeninterval --set=15 && php admin/cli/purge_caches.php'
 
 test-browser:  ## Real Chromium with fake camera/screen against the staging stack.
 	cd staging/browser && npm ci --silent && npx playwright install chromium >/dev/null && STUDENT=epstudent$$(shuf -i 5-20 -n 1 2>/dev/null || jot -r 1 5 20) npx playwright test --workers=1

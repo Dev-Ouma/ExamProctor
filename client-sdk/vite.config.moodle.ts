@@ -7,12 +7,12 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       lib: {
-        entry: resolve(__dirname, "src/index.ts"),
+        entry: resolve(import.meta.dirname, "src/index.ts"),
         name: "ExamProctorSDK",
         formats: ["umd"],
         fileName: () => (minify ? "sdk.min.js" : "sdk.js"),
       },
-      outDir: resolve(__dirname, `../moodle/quizaccess_examproctor/amd/${minify ? "build" : "src"}`),
+      outDir: resolve(import.meta.dirname, `../moodle/quizaccess_examproctor/amd/${minify ? "build" : "src"}`),
       emptyOutDir: false,
       minify,
       sourcemap: false,

@@ -26,6 +26,10 @@ const en = {
   reason_screen_unsupported: "This device cannot share its screen. Use a computer.",
   reason_screen_not_whole_display: "Share your entire screen, not a window or a tab.",
   reason_network_unavailable: "The connection to the proctoring service failed.",
+  capturing: "ExamProctor is on: camera and screen snapshots are being taken.",
+  screen_stopped: "Screen sharing has stopped. Reload the quiz page to share your screen again.",
+  leaving: "Saving proctoring data…",
+  reconnecting: "Connection lost. Your answers are safe in Moodle; the quiz page will reload when you are back online.",
 };
 
 type Strings = typeof en;
@@ -56,6 +60,10 @@ const sw: Strings = {
   reason_screen_unsupported: "Kifaa hiki hakiwezi kushiriki skrini. Tumia kompyuta.",
   reason_screen_not_whole_display: "Shiriki skrini nzima, si dirisha au kichupo.",
   reason_network_unavailable: "Muunganisho na huduma ya usimamizi umeshindwa.",
+  capturing: "ExamProctor imewashwa: picha za kamera na skrini zinachukuliwa.",
+  screen_stopped: "Kushiriki skrini kumesimama. Pakia upya ukurasa wa jaribio ili kushiriki skrini tena.",
+  leaving: "Tunahifadhi data ya usimamizi…",
+  reconnecting: "Muunganisho umepotea. Majibu yako yako salama kwenye Moodle; ukurasa wa jaribio utapakia upya mtandao ukirudi.",
 };
 
 export type StringKey = keyof Strings;

@@ -60,8 +60,9 @@ describe("PrecheckController", () => {
       screen_surface: "monitor",
       network_ok: true,
     });
-    expect(camera.track.stop).toHaveBeenCalled();
-    expect(screen.track.stop).toHaveBeenCalled();
+    // Streams stay open: the exam shell captures from them.
+    expect(camera.track.stop).not.toHaveBeenCalled();
+    expect(screen.track.stop).not.toHaveBeenCalled();
   });
 
   it("maps a refused camera to denied", async () => {

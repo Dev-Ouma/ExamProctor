@@ -24,6 +24,37 @@ class Session:
     consent_version: str | None = None
     precheck: dict[str, Any] | None = None
     ready_delivered: bool = False
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    client_health: dict[str, Any] | None = None
+    legal_hold: bool = False
+    purged_at: datetime | None = None
+
+
+UPLOAD_KINDS = ("camera", "screen", "reference", "room_scan")
+
+
+@dataclass
+class Upload:
+    session_id: str
+    kind: str
+    seq: int
+    key: str
+    sha256: str
+    bytes: int
+    captured_at: datetime
+    status: str = "pending"  # pending -> verified | corrupt
+    verified_at: datetime | None = None
+
+
+@dataclass
+class Event:
+    session_id: str
+    type: str
+    client_ts: datetime
+    payload: dict[str, Any]
+    server_ts: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -45,6 +76,12 @@ class Store(Protocol):
     async def due_outbox(self, now: datetime, limit: int = 50) -> list[OutboxItem]: ...
     async def mark_delivered(self, item: OutboxItem, now: datetime) -> None: ...
     async def mark_failed(self, item: OutboxItem, next_try_at: datetime) -> None: ...
+    async def put_upload(self, upload: Upload) -> Upload: ...
+    async def get_upload(self, session_id: str, key: str) -> Upload | None: ...
+    async def save_upload(self, upload: Upload) -> None: ...
+    async def count_uploads(self, session_id: str) -> dict[str, int]: ...
+    async def add_events(self, events: list[Event]) -> int: ...
+    async def sessions_to_purge(self, ended_before: datetime) -> list[Session]: ...
 
 
 def _session_from_claims(claims: dict[str, Any]) -> Session:
@@ -68,6 +105,8 @@ class MemoryStore:
         self.jtis: dict[str, datetime] = {}
         self.sessions: dict[str, Session] = {}
         self.outbox: list[OutboxItem] = []
+        self.uploads: dict[tuple[str, str], Upload] = {}
+        self.events: list[Event] = []
 
     async def use_jti(self, jti: str, expires_at: datetime) -> bool:
         if jti in self.jtis:
@@ -102,6 +141,33 @@ class MemoryStore:
         item.attempts += 1
         item.next_try_at = next_try_at
 
+    async def put_upload(self, upload: Upload) -> Upload:
+        return self.uploads.setdefault((upload.session_id, upload.key), upload)
+
+    async def get_upload(self, session_id: str, key: str) -> Upload | None:
+        return self.uploads.get((session_id, key))
+
+    async def save_upload(self, upload: Upload) -> None:
+        self.uploads[(upload.session_id, upload.key)] = upload
+
+    async def count_uploads(self, session_id: str) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for (sid, _), u in self.uploads.items():
+            if sid == session_id and u.status == "verified":
+                counts[u.kind] = counts.get(u.kind, 0) + 1
+        return counts
+
+    async def add_events(self, events: list[Event]) -> int:
+        self.events.extend(events)
+        return len(events)
+
+    async def sessions_to_purge(self, ended_before: datetime) -> list[Session]:
+        return [
+            s
+            for s in self.sessions.values()
+            if s.ended_at and s.ended_at < ended_before and not s.legal_hold and not s.purged_at
+        ]
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS launch_jti (
@@ -123,6 +189,33 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS client_health JSONB;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS legal_hold BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS purged_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS uploads (
+    session_id UUID NOT NULL REFERENCES sessions (id),
+    key TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    seq INT NOT NULL,
+    sha256 TEXT NOT NULL,
+    bytes INT NOT NULL,
+    captured_at TIMESTAMPTZ NOT NULL,
+    status TEXT NOT NULL,
+    verified_at TIMESTAMPTZ,
+    PRIMARY KEY (session_id, key)
+);
+CREATE TABLE IF NOT EXISTS events (
+    id BIGSERIAL PRIMARY KEY,
+    session_id UUID NOT NULL REFERENCES sessions (id),
+    type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    client_ts TIMESTAMPTZ NOT NULL,
+    server_ts TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS events_session ON events (session_id, client_ts);
 CREATE TABLE IF NOT EXISTS webhook_outbox (
     id BIGSERIAL PRIMARY KEY,
     event TEXT NOT NULL,
@@ -192,18 +285,32 @@ class PgStore:
             consent_version=row["consent_version"],
             precheck=json.loads(row["precheck"]) if row["precheck"] else None,
             ready_delivered=row["ready_delivered"],
+            started_at=row["started_at"],
+            ended_at=row["ended_at"],
+            last_seen_at=row["last_seen_at"],
+            client_health=json.loads(row["client_health"]) if row["client_health"] else None,
+            legal_hold=row["legal_hold"],
+            purged_at=row["purged_at"],
         )
 
     async def save_session(self, s: Session) -> None:
         await self.pool.execute(
             "UPDATE sessions SET status = $2, consent_version = $3,"
             " consented_at = CASE WHEN $3::text IS NOT NULL THEN COALESCE(consented_at, now()) END,"
-            " precheck = $4, ready_delivered = $5, updated_at = now() WHERE id = $1",
+            " precheck = $4, ready_delivered = $5, started_at = $6, ended_at = $7,"
+            " last_seen_at = $8, client_health = $9, legal_hold = $10, purged_at = $11,"
+            " updated_at = now() WHERE id = $1",
             uuid.UUID(s.id),
             s.status,
             s.consent_version,
             json.dumps(s.precheck) if s.precheck is not None else None,
             s.ready_delivered,
+            s.started_at,
+            s.ended_at,
+            s.last_seen_at,
+            json.dumps(s.client_health) if s.client_health is not None else None,
+            s.legal_hold,
+            s.purged_at,
         )
 
     async def enqueue(self, event: str, payload: dict[str, Any]) -> OutboxItem:
@@ -249,3 +356,74 @@ class PgStore:
             item.id,
             next_try_at,
         )
+
+    async def put_upload(self, u: Upload) -> Upload:
+        await self.pool.execute(
+            "INSERT INTO uploads (session_id, key, kind, seq, sha256, bytes, captured_at, status)"
+            " VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
+            uuid.UUID(u.session_id),
+            u.key,
+            u.kind,
+            u.seq,
+            u.sha256,
+            u.bytes,
+            u.captured_at,
+            u.status,
+        )
+        existing = await self.get_upload(u.session_id, u.key)
+        assert existing is not None
+        return existing
+
+    async def get_upload(self, session_id: str, key: str) -> Upload | None:
+        row = await self.pool.fetchrow(
+            "SELECT * FROM uploads WHERE session_id = $1 AND key = $2", uuid.UUID(session_id), key
+        )
+        if row is None:
+            return None
+        return Upload(
+            session_id=str(row["session_id"]),
+            kind=row["kind"],
+            seq=row["seq"],
+            key=row["key"],
+            sha256=row["sha256"],
+            bytes=row["bytes"],
+            captured_at=row["captured_at"],
+            status=row["status"],
+            verified_at=row["verified_at"],
+        )
+
+    async def save_upload(self, u: Upload) -> None:
+        await self.pool.execute(
+            "UPDATE uploads SET status = $3, verified_at = $4 WHERE session_id = $1 AND key = $2",
+            uuid.UUID(u.session_id),
+            u.key,
+            u.status,
+            u.verified_at,
+        )
+
+    async def count_uploads(self, session_id: str) -> dict[str, int]:
+        rows = await self.pool.fetch(
+            "SELECT kind, count(*) AS n FROM uploads WHERE session_id = $1 AND status = 'verified'"
+            " GROUP BY kind",
+            uuid.UUID(session_id),
+        )
+        return {r["kind"]: r["n"] for r in rows}
+
+    async def add_events(self, events: list[Event]) -> int:
+        await self.pool.executemany(
+            "INSERT INTO events (session_id, type, payload, client_ts, server_ts)"
+            " VALUES ($1, $2, $3, $4, $5)",
+            [
+                (uuid.UUID(e.session_id), e.type, json.dumps(e.payload), e.client_ts, e.server_ts)
+                for e in events
+            ],
+        )
+        return len(events)
+
+    async def sessions_to_purge(self, ended_before: datetime) -> list[Session]:
+        rows = await self.pool.fetch(
+            "SELECT id FROM sessions WHERE ended_at < $1 AND NOT legal_hold AND purged_at IS NULL",
+            ended_before,
+        )
+        sessions = [await self.get_session(str(r["id"])) for r in rows]
+        return [s for s in sessions if s is not None]

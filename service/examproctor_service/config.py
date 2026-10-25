@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     object_store_url: str = "http://localhost:8333"
     object_store_health_path: str = "/healthz"
+    object_store_public_url: str = "http://localhost:8333"  # as seen by browsers
+    object_store_access_key: str = ""
+    object_store_secret_key: str = ""
+    object_store_region: str = "us-east-1"
+    evidence_bucket: str = "evidence"
+    upload_url_ttl_s: int = 300
+    max_image_bytes: int = 400_000
+    retention_days: int = 90
+    retention_interval_s: float = 3600.0
     dependency_timeout_s: float = 2.0
 
     # Moodle site this service trusts (single site in v1).

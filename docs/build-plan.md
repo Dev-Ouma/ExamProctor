@@ -2,7 +2,7 @@
 
 Inputs: `examproctor-spec.md` (v0.3, approved), `docs/implementation-requirements.md`. Each milestone ends with tests shown, docs updated, commit, and a report under 15 lines.
 
-## M1 Foundation (Gate B)
+## M1 Foundation (Gate B) (done 2026-10-25; Gate B pending owner run)
 1. Repo layout per spec 13 (`moodle/`, `service/`, `client-sdk/`, `dashboards/`, `staging/`, `docs/`). Own git repo, not the umbrella `~/Dev` repo.
 2. `staging/compose.yml`: Moodle 4.5.1+ (Build 20250131) + PHP 8.1 + Postgres, FastAPI service, Postgres, Redis, SeaweedFS (S3). `make up` from scratch.
 3. Seed script: synthetic courses, quizzes, students, invigilators, reviewers, roles.
@@ -10,11 +10,11 @@ Inputs: `examproctor-spec.md` (v0.3, approved), `docs/implementation-requirement
 5. CI: phpcs (moodle-cs), PHPUnit, ruff + pytest, eslint + vitest, gitleaks, dependency audit.
 Exit: both plugins install on the stack; CI green; owner runs `make up` locally. Then install both plugins on `open.ac.ke` (owner-run installer, maintenance window) for integration testing.
 
-## M2 Launch and gate
+## M2 Launch and gate (done 2026-10-25)
 Launch JWT minting (RS256, 120 s, jti store); `/v1/sessions/exchange`, consent, precheck; signed `session.ready` webhook with nonce/timestamp; access rule blocks start without a ready record; Moodle app block (R1.4); pre-check UI in the SDK.
 Tests: token single use and expiry; replayed webhook rejected; forged POST cannot start a proctored attempt.
 
-## M3 Capture and evidence
+## M3 Capture and evidence (done 2026-10-25)
 Exam shell (R3) with same-origin frame and end detection; SDK capture loop, IndexedDB queue, presigned PUT, sha256; events and heartbeat ingest; MinIO SSE, object lock, retention job.
 Tests: 60 s network drop survives; out-of-order and duplicate uploads; retention deletes in test; shell survives 20 page navigations with one screen prompt.
 

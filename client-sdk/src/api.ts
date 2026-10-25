@@ -5,6 +5,31 @@ export interface Policy {
   screen: boolean;
   identity: boolean;
   strict: boolean;
+  camera_interval_s?: number;
+  screen_interval_s?: number;
+}
+
+export type UploadKind = "camera" | "screen" | "reference" | "room_scan";
+
+export interface PresignRequest {
+  kind: UploadKind;
+  bytes: number;
+  sha256: string;
+  seq: number;
+  captured_at: string;
+}
+
+export interface PresignResult {
+  key: string;
+  url?: string;
+  headers?: Record<string, string>;
+  already_uploaded?: boolean;
+}
+
+export interface ClientEvent {
+  type: string;
+  ts: string;
+  data?: Record<string, unknown>;
 }
 
 export interface ExchangeResult {
@@ -73,6 +98,34 @@ export class SessionApi {
 
   status(): Promise<SessionStatus> {
     return this.call("GET", `/v1/sessions/${this.sessionId}`);
+  }
+
+  presign(body: PresignRequest): Promise<PresignResult> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/uploads/presign`, body);
+  }
+
+  complete(key: string): Promise<{ key: string; status: string }> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/uploads/complete`, { key });
+  }
+
+  events(events: ClientEvent[]): Promise<{ accepted: number; rejected: number }> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/events`, { events });
+  }
+
+  heartbeat(body: Record<string, unknown>): Promise<{ server_time: string }> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/heartbeat`, body);
+  }
+
+  finish(): Promise<{ status: string }> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/finish`, {});
+  }
+
+  /** PUT bytes to a presigned object-store URL. */
+  async put(url: string, data: ArrayBuffer, headers: Record<string, string> = {}): Promise<void> {
+    const response = await this.fetchImpl(url, { method: "PUT", body: data, headers });
+    if (!response.ok) {
+      throw new ApiError(response.status, "put_failed", `object store returned ${response.status}`);
+    }
   }
 
   private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
