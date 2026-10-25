@@ -99,8 +99,12 @@ class quizaccess_examproctor extends access_rule_base {
 
         $token = launch_token::mint((int) $USER->id, $this->quiz, (int) $this->quiz->cmid, $this->policy());
         $mform->addElement('header', 'examproctorheader', get_string('precheckheader', 'quizaccess_examproctor'));
-        $mform->addElement('static', 'examproctor', '',
-            html_writer::div(get_string('precheckloading', 'quizaccess_examproctor'), '', ['id' => 'examproctor-precheck']));
+        $mform->addElement(
+            'static',
+            'examproctor',
+            '',
+            html_writer::div(get_string('precheckloading', 'quizaccess_examproctor'), '', ['id' => 'examproctor-precheck'])
+        );
         $PAGE->requires->js_call_amd('quizaccess_examproctor/sdk', 'mountPrecheck', [[
             'container' => '#examproctor-precheck',
             'serviceUrl' => config::service_url(),

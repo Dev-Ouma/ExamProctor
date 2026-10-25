@@ -36,7 +36,6 @@ class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
-
     /** @var string[] Tables keyed by user and quiz. */
     private const TABLES = ['local_examproctor_ready', 'local_examproctor_attempt'];
 
@@ -127,10 +126,18 @@ class provider implements
             if (!$context instanceof \context_module || !($quizid = self::quizid($context))) {
                 continue;
             }
-            $attempts = $DB->get_records('local_examproctor_attempt', ['userid' => $userid, 'quizid' => $quizid],
-                'timecreated', 'attemptid, sessionid, status, integrityscore, band, flagcount, timecreated');
-            $ready = $DB->get_records('local_examproctor_ready', ['userid' => $userid, 'quizid' => $quizid],
-                'timecreated', 'id, sessionid, context, timecreated, timeused');
+            $attempts = $DB->get_records(
+                'local_examproctor_attempt',
+                ['userid' => $userid, 'quizid' => $quizid],
+                'timecreated',
+                'attemptid, sessionid, status, integrityscore, band, flagcount, timecreated'
+            );
+            $ready = $DB->get_records(
+                'local_examproctor_ready',
+                ['userid' => $userid, 'quizid' => $quizid],
+                'timecreated',
+                'id, sessionid, context, timecreated, timeused'
+            );
             writer::with_context($context)->export_data(
                 [get_string('pluginname', 'local_examproctor')],
                 (object) ['attempts' => array_values($attempts), 'prechecks' => array_values($ready)]

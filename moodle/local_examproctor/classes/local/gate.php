@@ -35,8 +35,14 @@ class gate {
      * @param int|null $now current time, for tests.
      * @return void
      */
-    public static function record_ready(int $userid, int $quizid, string $sessionid, array $policy,
-            array $context = [], ?int $now = null): void {
+    public static function record_ready(
+        int $userid,
+        int $quizid,
+        string $sessionid,
+        array $policy,
+        array $context = [],
+        ?int $now = null
+    ): void {
         global $DB;
         $now = $now ?? time();
         if ($DB->record_exists('local_examproctor_ready', ['sessionid' => $sessionid])) {

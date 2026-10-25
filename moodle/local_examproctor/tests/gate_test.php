@@ -34,8 +34,8 @@ use local_examproctor\local\webhook_verifier;
  * @covers     \local_examproctor\local\gate
  */
 final class gate_test extends \advanced_testcase {
-    /** @var string Signing key used in these tests. */
-    private const KEY = 'test-signing-key-0123456789abcdef0123456789';
+    /** @var string Fixed, obviously fake signing key for these tests. */
+    private const KEY = 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk';
 
     protected function setUp(): void {
         parent::setUp();

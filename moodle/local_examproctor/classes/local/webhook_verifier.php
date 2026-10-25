@@ -34,8 +34,13 @@ class webhook_verifier {
      * @param int|null $now current time, for tests.
      * @return string|null null when valid, else a short reason code.
      */
-    public static function verify(string $timestamp, string $nonce, string $signature, string $body,
-            ?int $now = null): ?string {
+    public static function verify(
+        string $timestamp,
+        string $nonce,
+        string $signature,
+        string $body,
+        ?int $now = null
+    ): ?string {
         global $DB;
         $now = $now ?? time();
         $key = config::signing_key();
