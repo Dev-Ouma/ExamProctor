@@ -110,4 +110,29 @@ class gate {
         ]);
         return true;
     }
+
+    /**
+     * Close the Moodle attempt for a session an invigilator terminated.
+     *
+     * The attempt is submitted as it stands, so answers already saved count; nothing is graded as
+     * misconduct here. That decision belongs to a reviewer.
+     *
+     * @param string $sessionid proctoring session id.
+     * @return bool true when an in-progress attempt was closed.
+     */
+    public static function terminate(string $sessionid): bool {
+        global $DB;
+        $link = $DB->get_record('local_examproctor_attempt', ['sessionid' => $sessionid]);
+        if (!$link) {
+            return false;
+        }
+        $DB->set_field('local_examproctor_attempt', 'status', 'terminated', ['id' => $link->id]);
+        $DB->set_field('local_examproctor_attempt', 'timemodified', time(), ['id' => $link->id]);
+        $attempt = $DB->get_record('quiz_attempts', ['id' => $link->attemptid]);
+        if (!$attempt || $attempt->state !== \mod_quiz\quiz_attempt::IN_PROGRESS) {
+            return false;
+        }
+        \mod_quiz\quiz_attempt::create($attempt->id)->process_finish(time(), false, null, false);
+        return true;
+    }
 }

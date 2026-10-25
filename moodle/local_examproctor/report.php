@@ -15,7 +15,8 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Proctoring report for one quiz: session list, evidence timeline, decisions and appeals.
+ * Proctoring report for one quiz: session list, evidence timeline, decisions and appeals, and
+ * the live wall for invigilators.
  *
  * Moodle checks the capability and mints a one-hour staff token for this quiz only; the
  * dashboard then reads evidence straight from the service.
@@ -34,7 +35,9 @@ $cmid = required_param('cmid', PARAM_INT);
 [$course, $cm] = get_course_and_cm_from_cmid($cmid, 'quiz');
 require_login($course, false, $cm);
 $context = context_module::instance($cm->id);
-require_capability('local/examproctor:review', $context);
+if (!has_any_capability(['local/examproctor:review', 'local/examproctor:invigilate'], $context)) {
+    require_capability('local/examproctor:review', $context);
+}
 $quiz = $DB->get_record('quiz', ['id' => $cm->instance], '*', MUST_EXIST);
 
 $url = new moodle_url('/local/examproctor/report.php', ['cmid' => $cm->id]);

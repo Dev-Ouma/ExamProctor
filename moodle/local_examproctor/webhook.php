@@ -109,6 +109,15 @@ switch ($message['event']) {
         $DB->set_field_select('local_examproctor_attempt', 'timemodified', time(), 'sessionid = ?', [$sessionid]);
         local_examproctor_webhook_reply(200, ['ok' => true]);
         break;
+    case 'session.terminated':
+        // An invigilator ended the session (reason logged in the service): close the attempt now.
+        $sessionid = clean_param($data['session_id'] ?? '', PARAM_ALPHANUMEXT);
+        if ($sessionid === '') {
+            local_examproctor_webhook_reply(400, ['error' => 'bad_data']);
+        }
+        gate::terminate($sessionid);
+        local_examproctor_webhook_reply(200, ['ok' => true]);
+        break;
     case 'decision.recorded':
         $sessionid = clean_param($data['session_id'] ?? '', PARAM_ALPHANUMEXT);
         $kind = $data['kind'] ?? '';

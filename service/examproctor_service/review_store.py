@@ -253,6 +253,7 @@ def _session(row: asyncpg.Record) -> Session:
         started_at=row["started_at"],
         ended_at=row["ended_at"],
         last_seen_at=row["last_seen_at"],
+        client_health=json.loads(row["client_health"]) if row["client_health"] else None,
         legal_hold=row["legal_hold"],
         purged_at=row["purged_at"],
     )

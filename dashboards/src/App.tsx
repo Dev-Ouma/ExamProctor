@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, type DashboardConfig, ReviewApi, type SessionRow, type Summary } from "./api";
 import { APPEAL_LABELS, BAND_LABELS, DECISION_LABELS, FLAG_LABELS, formatTime, label } from "./labels";
+import { LiveWall } from "./LiveWall";
 import { SessionDetail } from "./SessionDetail";
 
 export type Mode = "staging" | "live";
@@ -30,6 +31,9 @@ export function App({ config, api }: { config: DashboardConfig; api?: ReviewApi 
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>("score");
   const [expired, setExpired] = useState(false);
+  const canLive = config.caps.includes("invigilate");
+  const canReview = config.caps.includes("review");
+  const [tab, setTab] = useState<"review" | "live">(canReview ? "review" : "live");
 
   const name = useCallback(
     (r: SessionRow) => config.people[String(r.moodle_user_id)]?.name ?? `User #${r.moodle_user_id}`,
@@ -37,6 +41,8 @@ export function App({ config, api }: { config: DashboardConfig; api?: ReviewApi 
   );
 
   const load = useCallback(() => {
+    // Invigilators without the review capability only get the live wall.
+    if (!config.caps.includes("review")) return;
     Promise.all([client.sessions(config.quizId), client.summary(config.quizId)])
       .then(([list, sum]) => {
         setRows(list);
@@ -46,7 +52,7 @@ export function App({ config, api }: { config: DashboardConfig; api?: ReviewApi 
         if (e instanceof ApiError && e.status === 401) setExpired(true);
         setError(e instanceof ApiError ? `${e.message} (${e.code})` : "The proctoring service could not be reached.");
       });
-  }, [client, config.quizId]);
+  }, [client, config.quizId, config.caps]);
   useEffect(load, [load]);
 
   useEffect(() => {
@@ -107,8 +113,21 @@ export function App({ config, api }: { config: DashboardConfig; api?: ReviewApi 
         </div>
       )}
       {error && <div className="alert alert-danger">{error}</div>}
+      {!open && canLive && canReview && (
+        <ul className="nav nav-tabs ep-noprint ep-tabs" role="tablist">
+          {(["review", "live"] as const).map((t) => (
+            <li className="nav-item" key={t} role="presentation">
+              <button type="button" role="tab" aria-selected={tab === t} className={`nav-link ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>
+                {t === "review" ? "Review" : "Live wall"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {open ? (
         <SessionDetail api={client} config={config} sessionId={open} onBack={() => setOpen(null)} onChanged={load} />
+      ) : tab === "live" ? (
+        <LiveWall api={client} config={config} onOpen={setOpen} />
       ) : rows === null ? (
         !error && <p>Loading sessions…</p>
       ) : (

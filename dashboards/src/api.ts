@@ -142,6 +142,19 @@ export interface SessionReview {
   url_ttl_s: number;
 }
 
+export interface LiveSession extends SessionRow {
+  last_seen_at: string | null;
+  online: boolean;
+  paused: boolean;
+  terminated: boolean;
+  client_health: Record<string, unknown> | null;
+  latest_camera: { url: string; captured_at: string; faces: number } | null;
+  recent_flags: { type: string; start: string; severity: number }[];
+  actions: { id: number; type: string; reason: string; message: string; actor_name: string; created_at: string; acked_at: string | null }[];
+}
+
+export type LiveAction = "warn" | "message" | "pause" | "resume" | "terminate";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -213,6 +226,33 @@ export class ReviewApi {
       method: "POST",
       body: JSON.stringify({ status, notes }),
     });
+  }
+
+  live(quizId: number): Promise<{ sessions: LiveSession[]; server_time: string }> {
+    return this.request(`/v1/live/quizzes/${quizId}/sessions`);
+  }
+
+  act(sessionId: string, type: LiveAction, reason: string, message: string): Promise<unknown> {
+    return this.request(`/v1/live/sessions/${sessionId}/actions`, {
+      method: "POST",
+      body: JSON.stringify({ type, reason, message }),
+    });
+  }
+
+  /** WebSocket that says when the live wall should refresh; the token goes in the first message. */
+  stream(quizId: number, onEvent: (type: string) => void, onClose: (code: number) => void): WebSocket {
+    const url = `${this.base.replace(/\/$/, "").replace(/^http/, "ws")}/v1/live/quizzes/${quizId}/stream`;
+    const ws = new WebSocket(url);
+    ws.onopen = () => ws.send(this.token);
+    ws.onmessage = (m) => {
+      try {
+        onEvent(JSON.parse(String(m.data)).type);
+      } catch {
+        // Ignore malformed frames.
+      }
+    };
+    ws.onclose = (e) => onClose(e.code);
+    return ws;
   }
 
   exportCsv(quizId: number): Promise<string> {

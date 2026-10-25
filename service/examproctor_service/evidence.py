@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from .api import SessionDep, SettingsDep, StoreDep, error
+from .live_store import paused
 from .objectstore import ObjectStore
 from .store import Event, Session, Upload
 
@@ -34,6 +35,8 @@ EVENT_TYPES = {
     "connectivity_gap",
     "shell_loaded",
     "attempt_left",
+    "display_info",
+    "terminated_by_invigilator",
 }
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
 
@@ -46,7 +49,8 @@ ObjectsDep = Annotated[ObjectStore, Depends(get_objects)]
 
 
 def require_capturing(session: Session) -> None:
-    if session.status not in ("ready", "finished"):
+    # A terminated session still accepts what the browser had queued, so the evidence is complete.
+    if session.status not in ("ready", "finished", "terminated"):
         raise error(409, "session_not_ready", "pre-checks have not passed")
     if session.purged_at is not None:
         raise error(410, "session_purged", "evidence for this session was deleted")
@@ -154,20 +158,37 @@ class Heartbeat(BaseModel):
 
 
 @router.post("/{session_id}/heartbeat")
-async def heartbeat(body: Heartbeat, session: SessionDep, store: StoreDep) -> dict[str, Any]:
+async def heartbeat(body: Heartbeat, session: SessionDep, store: StoreDep, request: Request) -> dict[str, Any]:
+    """Liveness for the live wall; the reply carries invigilator notices (warn, message, pause...)."""
     require_capturing(session)
     now = datetime.now(UTC)
     session.last_seen_at = now
     session.client_health = body.model_dump(mode="json")
     await store.save_session(session)
-    return {"server_time": now.isoformat(), "status": session.status}
+    actions = request.app.state.actions
+    notices = [a.notice() for a in await actions.take_undelivered(session.id)]
+    await request.app.state.bus.publish(session.quiz_id, {"type": "heartbeat", "session_id": session.id})
+    return {
+        "server_time": now.isoformat(),
+        "status": session.status,
+        "paused": paused(await actions.for_session(session.id)),
+        "notices": notices,
+    }
+
+
+@router.post("/{session_id}/notices/{action_id}/ack")
+async def ack_notice(action_id: int, session: SessionDep, request: Request) -> dict[str, Any]:
+    if not await request.app.state.actions.ack(session.id, action_id):
+        raise error(404, "not_found", "no such notice for this session")
+    return {"acked": action_id}
 
 
 @router.post("/{session_id}/finish")
-async def finish(session: SessionDep, store: StoreDep) -> dict[str, Any]:
+async def finish(session: SessionDep, store: StoreDep, request: Request) -> dict[str, Any]:
     require_capturing(session)
     if session.ended_at is None:
         session.ended_at = datetime.now(UTC)
         session.status = "finished"
         await store.save_session(session)
+        await request.app.state.bus.publish(session.quiz_id, {"type": "finished", "session_id": session.id})
     return {"status": session.status, "uploads": await store.count_uploads(session.id)}

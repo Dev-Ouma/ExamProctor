@@ -60,7 +60,7 @@ function local_examproctor_extend_settings_navigation(settings_navigation $setti
     if ($context->contextlevel !== CONTEXT_MODULE || $PAGE->cm === null || $PAGE->cm->modname !== 'quiz') {
         return;
     }
-    if (!has_capability('local/examproctor:review', $context)) {
+    if (!has_any_capability(['local/examproctor:review', 'local/examproctor:invigilate'], $context)) {
         return;
     }
     $dbman = $DB->get_manager();

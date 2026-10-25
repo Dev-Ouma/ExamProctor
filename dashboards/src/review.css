@@ -60,3 +60,22 @@ span.ep-band-high { background: var(--ep-high); }
   .ep-player { break-inside: avoid; }
   .ep-row { cursor: default; }
 }
+.ep-tabs { margin-bottom: 12px; }
+.ep-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ep-livecard { border: 1px solid #dee2e6; border-left-width: 4px; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.ep-band-border-high { border-left-color: var(--ep-high); }
+.ep-band-border-review { border-left-color: var(--ep-review); }
+.ep-band-border-clear { border-left-color: var(--ep-clear); }
+.ep-livehead { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.ep-livename { font-weight: 600; text-align: left; }
+.ep-state { font-size: 0.8em; border-radius: 10px; padding: 0 8px; white-space: nowrap; }
+.ep-state-online { background: #e8f5e9; color: var(--ep-clear); }
+.ep-state-paused { background: #fff3e0; color: var(--ep-review); }
+.ep-state-stale { background: #f1f3f5; color: var(--ep-muted); }
+.ep-state-ended { background: #eceff1; color: #37474f; }
+.ep-thumb { position: relative; background: #111; border-radius: 4px; overflow: hidden; aspect-ratio: 4 / 3; }
+.ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ep-thumbinfo { position: absolute; left: 4px; bottom: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 0.75em; padding: 0 4px; border-radius: 3px; }
+.ep-recent { margin: 0; padding-left: 1.1em; font-size: 0.85em; }
+.ep-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.ep-actionform { display: flex; flex-direction: column; gap: 4px; }

@@ -17,6 +17,7 @@ from .analysis.faces import FaceEngine
 from .analysis.rules import Frame, PageEvent, all_flags
 from .analysis.score import compute
 from .config import Settings, get_settings
+from .live_store import RedisBus
 from .objectstore import ObjectStore, S3ObjectStore
 from .store import PgStore
 
@@ -153,15 +154,19 @@ async def run(settings: Settings) -> None:
     store = await PgStore.connect(settings.database_url)
     objects = S3ObjectStore(settings)
     engine = FaceEngine(MODELS)
+    bus = RedisBus(settings.redis_url)
     log.info("worker ready")
     try:
         while True:
             touched = await analyse_batch(store.pool, objects, engine)
             for session_id in touched:
                 await rescore(store.pool, store, session_id)
+                quiz_id = await store.pool.fetchval("SELECT quiz_id FROM sessions WHERE id = $1", session_id)
+                await bus.publish(quiz_id, {"type": "scored", "session_id": str(session_id)})
             if not touched:
                 await asyncio.sleep(1)
     finally:
+        await bus.close()
         await store.close()
 
 

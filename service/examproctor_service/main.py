@@ -17,6 +17,8 @@ from .api import router as sessions_router
 from .config import Settings, get_settings
 from .evidence import router as evidence_router
 from .health import run_checks
+from .live import router as live_router
+from .live_store import MemoryActionStore, MemoryBus, PgActionStore, RedisBus
 from .objectstore import ObjectStore, S3ObjectStore
 from .privacy import router as privacy_router
 from .refphotos import router as refphotos_router
@@ -48,8 +50,13 @@ def create_app(
         if owned_store:
             app.state.reviews = PgReviewStore(app.state.store.pool)
             await app.state.reviews.migrate()
+            app.state.actions = PgActionStore(app.state.store.pool)
+            await app.state.actions.migrate()
+            app.state.bus = RedisBus(settings.redis_url)
         else:
             app.state.reviews = MemoryReviewStore(app.state.store)
+            app.state.actions = MemoryActionStore()
+            app.state.bus = MemoryBus()
         background = []
         if owned_store:
             await app.state.objects.ensure_bucket()
@@ -65,6 +72,7 @@ def create_app(
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             if owned_store:
+                await app.state.bus.close()
                 await app.state.store.close()
             if http is None:
                 await app.state.http.aclose()
@@ -110,6 +118,7 @@ def create_app(
     app.include_router(refphotos_router)
     app.include_router(review_router)
     app.include_router(privacy_router)
+    app.include_router(live_router)
     return app
 
 

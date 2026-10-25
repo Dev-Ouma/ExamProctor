@@ -55,7 +55,7 @@ def decode_session_token(token: str, settings: Settings) -> dict[str, Any]:
         raise TokenError(str(exc)) from exc
 
 
-STAFF_CAPS = {"review", "decide", "exportevidence"}
+STAFF_CAPS = {"review", "decide", "exportevidence", "invigilate"}
 REQUIRED_STAFF_CLAIMS = ["iss", "aud", "sub", "iat", "exp", "course_id", "quiz_id", "caps"]
 
 

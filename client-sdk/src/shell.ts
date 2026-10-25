@@ -6,6 +6,7 @@
 import type { Policy, SessionApi } from "./api";
 import { captureOnce, type FrameSource, StreamFrameSource } from "./capture";
 import { EventCollector } from "./events";
+import { NoticeBoard, type NoticeText } from "./notices";
 import { SelfView, type SelfViewText } from "./selfview";
 import type { UploadQueue } from "./queue";
 import { Uploader } from "./uploader";
@@ -13,13 +14,13 @@ import { Uploader } from "./uploader";
 const ATTEMPT_PAGES = /\/mod\/quiz\/(attempt|summary|startattempt|processattempt)\.php$/;
 
 export interface ShellDeps {
-  api: Pick<SessionApi, "presign" | "complete" | "put" | "events" | "heartbeat" | "finish">;
+  api: Pick<SessionApi, "presign" | "complete" | "put" | "events" | "heartbeat" | "finish" | "ack">;
   policy: Policy;
   queue: UploadQueue;
   camera?: MediaStream;
   screen?: MediaStream;
   staging: boolean;
-  text: { capturing: string; screenStopped: string; leaving: string; reconnecting: string } & SelfViewText;
+  text: { capturing: string; screenStopped: string; leaving: string; reconnecting: string } & SelfViewText & NoticeText;
 }
 
 export class ExamShell {
@@ -33,6 +34,7 @@ export class ExamShell {
   private lastGoodUrl?: string;
   private frameBroken = false;
   private selfView?: SelfView;
+  private notices?: NoticeBoard;
 
   constructor(private readonly deps: ShellDeps) {
     this.events = new EventCollector(deps.api);
@@ -60,6 +62,11 @@ export class ExamShell {
     overlay.append(this.status, this.iframe);
     this.selfView = new SelfView(this.deps.text, this.deps.camera, this.deps.screen);
     overlay.append(this.selfView.root);
+    this.notices = new NoticeBoard(overlay, this.deps.text, (id) => this.deps.api.ack(id), () => {
+      this.events.record("terminated_by_invigilator");
+      // Moodle closes the attempt; reload the quiz page once capture has stopped.
+      void this.stop().finally(() => window.setTimeout(() => window.location.reload(), 8000));
+    });
     document.body.append(overlay);
     this.iframe.addEventListener("load", () => this.onFrameLoad());
 
@@ -146,15 +153,17 @@ export class ExamShell {
     };
     window.addEventListener("online", recover);
     this.every(5000, recover);
-    this.every(10000, async () =>
+    const beat = async () =>
       this.deps.api
         .heartbeat({
           queued_uploads: await this.deps.queue.size(),
           camera_live: this.deps.camera?.getVideoTracks().some((t) => t.readyState === "live") ?? null,
           screen_live: this.deps.screen?.getVideoTracks().some((t) => t.readyState === "live") ?? null,
         })
-        .catch(() => this.events.record("connectivity_gap")),
-    );
+        .then((reply) => this.notices?.apply(reply))
+        .catch(() => this.events.record("connectivity_gap"));
+    void beat();
+    this.every(10000, beat);
   }
 
   /** Stop capture, try to send what is queued (up to 10 s), close the session, release devices. */

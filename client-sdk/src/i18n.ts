@@ -36,6 +36,11 @@ const en = {
   hide_self_view: "Hide",
   show_self_view: "Show camera",
   preview_hint: "This is what the camera sees. Keep your face in view during the quiz.",
+  notice_warn: "Warning from the invigilator",
+  notice_message: "Message from the invigilator",
+  notice_ok: "OK",
+  paused: "The invigilator has paused your exam. Stay where you are; it will continue when they resume it. Your time keeps running in Moodle.",
+  terminated: "The invigilator has ended your exam session. Your saved answers have been submitted. A reviewer will look at what happened before any decision.",
 };
 
 type Strings = typeof en;
@@ -76,6 +81,11 @@ const sw: Strings = {
   hide_self_view: "Ficha",
   show_self_view: "Onyesha kamera",
   preview_hint: "Hiki ndicho kamera inaona. Weka uso wako uonekane wakati wa jaribio.",
+  notice_warn: "Onyo kutoka kwa msimamizi",
+  notice_message: "Ujumbe kutoka kwa msimamizi",
+  notice_ok: "Sawa",
+  paused: "Msimamizi amesimamisha mtihani wako. Kaa ulipo; utaendelea atakapoufungua tena. Muda wako unaendelea kuhesabiwa kwenye Moodle.",
+  terminated: "Msimamizi amemaliza kipindi chako cha mtihani. Majibu yako yaliyohifadhiwa yamewasilishwa. Mkaguzi ataangalia kilichotokea kabla ya uamuzi wowote.",
 };
 
 export type StringKey = keyof Strings;

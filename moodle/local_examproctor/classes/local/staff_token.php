@@ -32,11 +32,12 @@ class staff_token {
     /**
      * Service capabilities for a user in a quiz context.
      *
-     * Reviewers may view and record decisions; exporting evidence is a separate capability.
+     * Reviewers may view and record decisions; exporting evidence and live invigilation are
+     * separate capabilities.
      *
      * @param \context_module $context quiz context.
      * @param int|null $userid user, default the current user.
-     * @return string[] subset of review, decide, exportevidence.
+     * @return string[] subset of review, decide, exportevidence, invigilate.
      */
     public static function caps(\context_module $context, ?int $userid = null): array {
         $caps = [];
@@ -46,6 +47,9 @@ class staff_token {
         }
         if ($caps && has_capability('local/examproctor:exportevidence', $context, $userid)) {
             $caps[] = 'exportevidence';
+        }
+        if (has_capability('local/examproctor:invigilate', $context, $userid)) {
+            $caps[] = 'invigilate';
         }
         return $caps;
     }

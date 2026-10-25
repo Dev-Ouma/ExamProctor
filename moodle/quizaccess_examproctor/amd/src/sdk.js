@@ -47,6 +47,9 @@
 		heartbeat(body) {
 			return this.call("POST", `/v1/sessions/${this.sessionId}/heartbeat`, body);
 		}
+		ack(noticeId) {
+			return this.call("POST", `/v1/sessions/${this.sessionId}/notices/${noticeId}/ack`, {});
+		}
 		finish() {
 			return this.call("POST", `/v1/sessions/${this.sessionId}/finish`, {});
 		}
@@ -385,6 +388,81 @@
 		} catch {}
 		return new MemoryQueue();
 	}
+	// src/notices.ts
+	var LAYER = "position:absolute;inset:0;z-index:100002;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;font:16px sans-serif";
+	var BOX = "background:#fff;color:#000;max-width:520px;margin:16px;padding:20px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.4)";
+	var NoticeBoard = class {
+		constructor(host, text, ack, onTerminate) {
+			this.host = host;
+			this.text = text;
+			this.ack = ack;
+			this.onTerminate = onTerminate;
+			this.ended = false;
+		}
+		/** Apply one heartbeat reply. */
+		apply(reply) {
+			for (const notice of reply.notices ?? []) this.show(notice);
+			if (!this.ended) this.setPaused(Boolean(reply.paused));
+		}
+		get isPaused() {
+			return Boolean(this.pauseLayer);
+		}
+		show(notice) {
+			if (notice.type === "terminate") {
+				this.ended = true;
+				this.setPaused(false);
+				this.layer(this.text.terminated, notice.message);
+				this.ack(notice.id).catch(() => void 0);
+				this.onTerminate();
+				return;
+			}
+			if (notice.type === "warn" || notice.type === "message") {
+				const title = notice.type === "warn" ? this.text.notice_warn : this.text.notice_message;
+				const layer = this.layer(title, notice.message, true);
+				const ok = document.createElement("button");
+				ok.type = "button";
+				ok.textContent = this.text.notice_ok;
+				ok.setAttribute("style", "margin-top:12px;padding:6px 16px;font:16px sans-serif;cursor:pointer");
+				ok.addEventListener("click", () => {
+					layer.remove();
+					this.ack(notice.id).catch(() => void 0);
+				});
+				layer.firstElementChild.append(ok);
+				ok.focus();
+				return;
+			}
+			this.ack(notice.id).catch(() => void 0);
+		}
+		setPaused(paused) {
+			if (paused && !this.pauseLayer) this.pauseLayer = this.layer(this.text.paused, "");
+			else if (!paused && this.pauseLayer) {
+				this.pauseLayer.remove();
+				this.pauseLayer = void 0;
+			}
+		}
+		layer(title, detail, dialog = false) {
+			const layer = document.createElement("div");
+			layer.className = "examproctor-notice";
+			layer.setAttribute("style", LAYER);
+			const box = document.createElement("div");
+			box.setAttribute("role", dialog ? "alertdialog" : "alert");
+			box.setAttribute("aria-modal", "true");
+			box.setAttribute("style", BOX);
+			const heading = document.createElement("p");
+			heading.setAttribute("style", "margin:0 0 8px;font-weight:600");
+			heading.textContent = title;
+			box.append(heading);
+			if (detail) {
+				const body = document.createElement("p");
+				body.setAttribute("style", "margin:0;white-space:pre-wrap");
+				body.textContent = detail;
+				box.append(body);
+			}
+			layer.append(box);
+			this.host.append(layer);
+			return layer;
+		}
+	};
 	// src/selfview.ts
 	/** A muted, mirrored, inline video of a camera stream. */
 	function previewVideo(stream, width) {
@@ -527,6 +605,10 @@
 			overlay.append(this.status, this.iframe);
 			this.selfView = new SelfView(this.deps.text, this.deps.camera, this.deps.screen);
 			overlay.append(this.selfView.root);
+			this.notices = new NoticeBoard(overlay, this.deps.text, (id) => this.deps.api.ack(id), () => {
+				this.events.record("terminated_by_invigilator");
+				this.stop().finally(() => window.setTimeout(() => window.location.reload(), 8e3));
+			});
 			document.body.append(overlay);
 			this.iframe.addEventListener("load", () => this.onFrameLoad());
 			form.target = name;
@@ -603,11 +685,13 @@
 			};
 			window.addEventListener("online", recover);
 			this.every(5e3, recover);
-			this.every(1e4, async () => this.deps.api.heartbeat({
+			const beat = async () => this.deps.api.heartbeat({
 				queued_uploads: await this.deps.queue.size(),
 				camera_live: this.deps.camera?.getVideoTracks().some((t) => t.readyState === "live") ?? null,
 				screen_live: this.deps.screen?.getVideoTracks().some((t) => t.readyState === "live") ?? null
-			}).catch(() => this.events.record("connectivity_gap")));
+			}).then((reply) => this.notices?.apply(reply)).catch(() => this.events.record("connectivity_gap"));
+			beat();
+			this.every(1e4, beat);
 		}
 		/** Stop capture, try to send what is queued (up to 10 s), close the session, release devices. */
 		async stop() {
@@ -662,7 +746,12 @@
 		screen_shared: "Screen shared",
 		hide_self_view: "Hide",
 		show_self_view: "Show camera",
-		preview_hint: "This is what the camera sees. Keep your face in view during the quiz."
+		preview_hint: "This is what the camera sees. Keep your face in view during the quiz.",
+		notice_warn: "Warning from the invigilator",
+		notice_message: "Message from the invigilator",
+		notice_ok: "OK",
+		paused: "The invigilator has paused your exam. Stay where you are; it will continue when they resume it. Your time keeps running in Moodle.",
+		terminated: "The invigilator has ended your exam session. Your saved answers have been submitted. A reviewer will look at what happened before any decision."
 	};
 	var sw = {
 		title: "Kabla ya kuanza",
@@ -698,7 +787,12 @@
 		screen_shared: "Skrini inashirikiwa",
 		hide_self_view: "Ficha",
 		show_self_view: "Onyesha kamera",
-		preview_hint: "Hiki ndicho kamera inaona. Weka uso wako uonekane wakati wa jaribio."
+		preview_hint: "Hiki ndicho kamera inaona. Weka uso wako uonekane wakati wa jaribio.",
+		notice_warn: "Onyo kutoka kwa msimamizi",
+		notice_message: "Ujumbe kutoka kwa msimamizi",
+		notice_ok: "Sawa",
+		paused: "Msimamizi amesimamisha mtihani wako. Kaa ulipo; utaendelea atakapoufungua tena. Muda wako unaendelea kuhesabiwa kwenye Moodle.",
+		terminated: "Msimamizi amemaliza kipindi chako cha mtihani. Majibu yako yaliyohifadhiwa yamewasilishwa. Mkaguzi ataangalia kilichotokea kabla ya uamuzi wowote."
 	};
 	function strings(lang) {
 		return lang.toLowerCase().startsWith("sw") ? sw : en;

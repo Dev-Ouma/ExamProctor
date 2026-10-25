@@ -25,8 +25,9 @@ Face detect / count / match (FACE_MODEL = DeepFace wrapper; underlying model lic
 Review dashboard; decisions and appeals; per-question flag badges; CSV (cursor) and PDF export; Moodle summary tables; privacy provider export and erase through the service.
 Notes: PDF is browser print-to-PDF of the incident report; playback steps through snapshots (no video, per feature triage); student self-view added to the exam shell.
 
-## M6 Live invigilation
+## M6 Live invigilation (built 2026-10-25; deployed to agiledev)
 Live wall over WebSocket and Redis pub/sub; warn / message / pause / terminate with reasons; student notices.
+Notes: student notices ride on the 10 s heartbeat (more reliable than a socket on weak networks); pause covers the quiz but cannot stop Moodle's timer, and the student is told so; terminate submits the attempt as it stands and leaves any outcome to a reviewer.
 
 ## M7 Simulator and load (Gate D)
 Headless candidates with fake media and scripted misbehaviour; ramp to 5,000; security checklist incl. R-01..R-07 regression tests; accessibility checks.

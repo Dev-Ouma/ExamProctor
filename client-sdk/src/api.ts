@@ -68,6 +68,21 @@ export class ApiError extends Error {
 
 type Fetch = typeof fetch;
 
+/** An invigilator action as the student sees it. */
+export interface Notice {
+  id: number;
+  type: "warn" | "message" | "pause" | "resume" | "terminate";
+  message: string;
+  created_at: string;
+}
+
+export interface HeartbeatReply {
+  server_time: string;
+  status?: string;
+  paused?: boolean;
+  notices?: Notice[];
+}
+
 export class SessionApi {
   private token = "";
   private sessionId = "";
@@ -113,8 +128,12 @@ export class SessionApi {
     return this.call("POST", `/v1/sessions/${this.sessionId}/events`, { events });
   }
 
-  heartbeat(body: Record<string, unknown>): Promise<{ server_time: string }> {
+  heartbeat(body: Record<string, unknown>): Promise<HeartbeatReply> {
     return this.call("POST", `/v1/sessions/${this.sessionId}/heartbeat`, body);
+  }
+
+  ack(noticeId: number): Promise<unknown> {
+    return this.call("POST", `/v1/sessions/${this.sessionId}/notices/${noticeId}/ack`, {});
   }
 
   finish(): Promise<{ status: string }> {

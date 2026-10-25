@@ -168,3 +168,60 @@ describe("nearestBefore", () => {
     expect(nearestBefore(items, 5)?.t).toBe(10);
   });
 });
+
+describe("Live wall", () => {
+  const live = {
+    ...sessions[0],
+    ended_at: null,
+    last_seen_at: "2026-10-25T10:05:00Z",
+    online: true,
+    paused: false,
+    terminated: false,
+    client_health: { queued_uploads: 0 },
+    latest_camera: { url: "https://img/live.jpg", captured_at: "2026-10-25T10:05:00Z", faces: 1 },
+    recent_flags: [{ type: "MULTIPLE_FACES", start: "2026-10-25T10:04:00Z", severity: 3 }],
+    actions: [],
+  };
+
+  function liveApi() {
+    const calls: { url: string; body?: string }[] = [];
+    const fetcher = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? String(init.body) : undefined });
+      const path = String(url).replace(config.serviceUrl, "");
+      if (path === "/v1/live/quizzes/3/sessions") return new Response(JSON.stringify({ sessions: [live], server_time: "2026-10-25T10:05:05Z" }));
+      if (path.endsWith("/actions")) return new Response(JSON.stringify({ id: 1 }));
+      return new Response(JSON.stringify({ sessions: [], next: null, bands: {}, decisions: {}, flag_types: {} }));
+    };
+    return { calls, api: new ReviewApi(config.serviceUrl, config.token, fetcher as typeof fetch) };
+  }
+
+  it("shows online students and sends a warning with a reason", async () => {
+    const { api, calls } = liveApi();
+    render(<App config={{ ...config, caps: ["review", "decide", "invigilate"] }} api={api} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Live wall" }));
+    await screen.findByText("Online");
+    expect(screen.getByText(/More than one face in view/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Warn" }));
+    const send = screen.getByRole("button", { name: "Send warn" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Warn: reason"), { target: { value: "Second person behind" } });
+    fireEvent.click(send);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/v1/live/sessions/s1/actions"))).toBe(true));
+    const sent = calls.find((c) => c.url.endsWith("/actions"))!;
+    expect(JSON.parse(sent.body!)).toEqual({ type: "warn", reason: "Second person behind", message: "" });
+  });
+
+  it("needs a confirmation before ending a session", async () => {
+    const { api } = liveApi();
+    render(<App config={{ ...config, caps: ["invigilate"] }} api={api} />);
+    await screen.findByText("Online");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".alert-danger")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "End session" }));
+    fireEvent.change(screen.getByLabelText("End session: reason"), { target: { value: "Impersonation" } });
+    const send = screen.getByRole("button", { name: "Send end session" }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(send.disabled).toBe(false);
+  });
+});
