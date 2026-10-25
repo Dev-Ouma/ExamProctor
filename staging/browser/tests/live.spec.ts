@@ -38,7 +38,8 @@ test("invigilator actions reach the student", async ({ browser }) => {
     if (message) await card.getByLabel(`${action}: message to student`).fill(message);
     if (confirm) await card.getByRole("checkbox").check();
     await card.getByRole("button", { name: `Send ${action.toLowerCase()}` }).click();
-    await expect(card.getByText(`${action} sent.`)).toBeVisible();
+    // An ended session leaves the filtered card at once, so look for the note on the whole page.
+    await expect(staff.getByText(`${action} sent.`).first()).toBeVisible();
   };
 
   await send("Warn", "Looking at another screen", "Please keep your eyes on the quiz.");

@@ -33,5 +33,6 @@ Notes: student notices ride on the 10 s heartbeat (more reliable than a socket o
 Headless candidates with fake media and scripted misbehaviour; ramp to 5,000; security checklist incl. R-01..R-07 regression tests; accessibility checks.
 Notes: simulator, security checklist (`docs/security-checklist.md`) and WCAG 2.1 AA checks done; 1,000 candidates meet every target on a laptop bench; 3,000 and 5,000 saturated the bench itself and need a dedicated host (`docs/loadtest/README.md`).
 
-## M8 Pilot and readiness
+## M8 Pilot and readiness (prepared 2026-10-25; pilot and sign-offs pending)
 Pilot kit, go-live checklist, runbooks, kill switch and rollback rehearsal, DPIA sign-off.
+Notes: kill switch and rollback rehearsed on agiledev; `docs/pilot-kit.md`, `docs/go-live-checklist.md`, `docs/runbooks/`, `docs/dpia-draft.md` written. Pilot with real students, DPIA signature and the dedicated-host load test remain.
