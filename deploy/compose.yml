@@ -1,0 +1,77 @@
+# ExamProctor service on agiledev. nginx proxies /examproctor-api/ -> :8000 and /evidence/ -> :8333.
+name: examproctor
+
+x-service-env: &service-env
+  EXAMPROCTOR_ENV: staging
+  EXAMPROCTOR_DATABASE_URL: postgresql://examproctor:${SERVICE_DB_PASSWORD}@service-db:5432/examproctor
+  EXAMPROCTOR_REDIS_URL: redis://redis:6379/0
+  EXAMPROCTOR_OBJECT_STORE_URL: http://objectstore:8333
+  EXAMPROCTOR_OBJECT_STORE_PUBLIC_URL: https://agiledev.ouk.ac.ke
+  EXAMPROCTOR_OBJECT_STORE_ACCESS_KEY: ${EXAMPROCTOR_S3_ACCESS_KEY}
+  EXAMPROCTOR_OBJECT_STORE_SECRET_KEY: ${EXAMPROCTOR_S3_SECRET_KEY}
+  EXAMPROCTOR_MOODLE_ISSUER: https://agiledev.ouk.ac.ke
+  EXAMPROCTOR_MOODLE_SHARED_SECRET: ${EXAMPROCTOR_SHARED_SECRET}
+  EXAMPROCTOR_MOODLE_WEBHOOK_URL: https://agiledev.ouk.ac.ke/local/examproctor/webhook.php
+  EXAMPROCTOR_SESSION_SIGNING_KEY: ${EXAMPROCTOR_SESSION_KEY}
+  EXAMPROCTOR_CORS_ORIGINS: '["https://agiledev.ouk.ac.ke"]'
+
+services:
+  service-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: examproctor
+      POSTGRES_USER: examproctor
+      POSTGRES_PASSWORD: ${SERVICE_DB_PASSWORD}
+    volumes: [service-db:/var/lib/postgresql/data]
+    mem_limit: 256m
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U examproctor"], interval: 5s, retries: 20 }
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 5s, retries: 20 }
+
+  objectstore:
+    image: chrislusf/seaweedfs:4.45
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        printf '{"identities":[{"name":"examproctor","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}'
+        "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY" > /tmp/s3.json &&
+        exec weed server -dir=/data -s3 -s3.port=8333 -s3.config=/tmp/s3.json
+        -s3.encryptVolumeData -filer.encryptVolumeData -master.volumeSizeLimitMB=1024
+        -volume.max=0
+    environment:
+      S3_ACCESS_KEY: ${EXAMPROCTOR_S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${EXAMPROCTOR_S3_SECRET_KEY}
+    ports: ["127.0.0.1:8333:8333"]
+    volumes: [objectstore:/data]
+    mem_limit: 256m
+    healthcheck: { test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8333/healthz >/dev/null"], interval: 5s, retries: 30 }
+
+  service:
+    image: examproctor-service:live
+    restart: unless-stopped
+    depends_on:
+      service-db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      objectstore: { condition: service_healthy }
+    environment: *service-env
+    ports: ["127.0.0.1:8000:8000"]
+    mem_limit: 768m
+
+  worker:
+    image: examproctor-service:live
+    restart: unless-stopped
+    environment: *service-env
+    command: ["python", "-m", "examproctor_service.worker"]
+    depends_on:
+      service: { condition: service_started }
+    mem_limit: 768m
+
+volumes:
+  service-db:
+  objectstore:

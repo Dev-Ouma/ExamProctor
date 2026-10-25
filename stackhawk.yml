@@ -1,0 +1,31 @@
+# HawkScan DAST for the ExamProctor service API (local staging stack).
+#   make loadtest-up              # or make up
+#   make hawkscan                 # mints a 2 h staff token and scans
+app:
+  applicationId: ${APP_ID:3509ef69-bc6f-431d-8fb0-cc06ff9b6555}
+  env: ${APP_ENV:Staging}
+  host: ${APP_HOST:http://localhost:8000}
+  openApiConf:
+    path: /openapi.json
+  authentication:
+    external:
+      values:
+        - type: TOKEN
+          tokenType: Bearer
+          value:
+            name: Authorization
+            val: ${AUTH_TOKEN:}
+    testPath:
+      path: /v1/review/quizzes/990001/summary
+      success: ".*200.*"
+      requestMethod: GET
+  excludePaths:
+    # Evidence uploads go to the object store, not the API.
+    - "/evidence/.*"
+tags:
+  - name: _STACKHAWK_AGENT
+    value: ${HAWK_AGENT:none}
+  - name: _STACKHAWK_GIT_COMMIT_SHA
+    value: ${COMMIT_SHA:none}
+  - name: _STACKHAWK_GIT_BRANCH
+    value: ${BRANCH_NAME:none}

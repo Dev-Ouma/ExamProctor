@@ -2,7 +2,7 @@
 COMPOSE := docker compose -f staging/compose.yml --env-file staging/.env --env-file staging/examproctor.secrets
 MOODLE_EXEC := $(COMPOSE) exec -T -u www-data moodle
 
-.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle loadtest-up loadtest loadtest-down
+.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle loadtest-up loadtest loadtest-down hawkscan
 
 staging/.env:
 	@cp staging/.env.example staging/.env
@@ -81,3 +81,9 @@ loadtest:  ## Simulated candidates against the local stack: make loadtest USERS=
 
 loadtest-down:  ## Stop the load-test stack (keeps volumes).
 	$(LOADTEST) stop
+
+hawkscan:  ## HawkScan DAST against the local service (needs hawk CLI and `hawk init`).
+	@set -a; . staging/examproctor.secrets; set +a; \
+	AUTH_TOKEN=$$(cd service && uv run --frozen python -c "import jwt,os,time; n=int(time.time()); print(jwt.encode({'iss':'http://localhost:8080','aud':'examproctor-staff','sub':'1','name':'HawkScan','course_id':990001,'quiz_id':990001,'caps':['review','decide','exportevidence','invigilate'],'iat':n,'exp':n+7000}, os.environ['EXAMPROCTOR_SHARED_SECRET'], algorithm='HS256'))") \
+	COMMIT_SHA=$$(git rev-parse HEAD) BRANCH_NAME=$$(git rev-parse --abbrev-ref HEAD) HAWK_AGENT=$${HAWK_AGENT:-claude-code} \
+	sh -c 'test -n "$$AUTH_TOKEN" || { echo "could not mint AUTH_TOKEN" >&2; exit 1; }; echo "StackHawk | token length $${#AUTH_TOKEN}"; hawk scan stackhawk.yml'

@@ -90,6 +90,11 @@ def create_app(
         request.state.request_id = request.headers.get("X-Request-Id") or uuid.uuid4().hex
         response = await call_next(request)
         response.headers["X-Request-Id"] = request.state.request_id
+        # JSON API: never sniffed, framed, cached or given a referrer.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     @app.exception_handler(HTTPException)

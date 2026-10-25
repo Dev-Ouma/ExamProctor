@@ -48,3 +48,11 @@ def test_staging_refuses_short_keys():
 
     with pytest.raises(ValidationError, match="at least 32 characters"):
         Settings(env="staging", moodle_shared_secret="short", session_signing_key="x" * 32)
+
+
+def test_security_headers_on_every_response(client):
+    for path in ("/v1/health", "/v1/review/quizzes/3/sessions"):
+        headers = client.get(path).headers
+        assert headers["X-Content-Type-Options"] == "nosniff"
+        assert headers["X-Frame-Options"] == "DENY"
+        assert headers["Cache-Control"] == "no-store"
