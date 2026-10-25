@@ -76,6 +76,10 @@ class ReviewStore(Protocol):
     async def add_review(self, review: Review) -> None: ...
     async def audit(self, actor: str, action: str, target: str, ip: str | None, detail: dict[str, Any]) -> None: ...
     async def summary(self, quiz_id: int) -> dict[str, Any]: ...
+    async def user_sessions(self, user_id: int, quiz_id: int | None) -> list[Session]: ...
+    async def quiz_users(self, quiz_id: int) -> list[int]: ...
+    async def user_quizzes(self, user_id: int) -> list[int]: ...
+    async def erase_session(self, session_id: str) -> None: ...
 
 
 def summarise(rows: list[SessionRow], flag_types: dict[str, int]) -> dict[str, Any]:
@@ -172,6 +176,27 @@ class MemoryReviewStore:
             for f in self.flag_rows.get(r.session.id, []):
                 types[f["type"]] = types.get(f["type"], 0) + 1
         return summarise(rows, types)
+
+    async def user_sessions(self, user_id: int, quiz_id: int | None) -> list[Session]:
+        return [
+            s
+            for s in self.store.sessions.values()
+            if s.moodle_user_id == user_id and (quiz_id is None or s.quiz_id == quiz_id)
+        ]
+
+    async def quiz_users(self, quiz_id: int) -> list[int]:
+        return sorted({s.moodle_user_id for s in self.store.sessions.values() if s.quiz_id == quiz_id})
+
+    async def user_quizzes(self, user_id: int) -> list[int]:
+        return sorted({s.quiz_id for s in self.store.sessions.values() if s.moodle_user_id == user_id})
+
+    async def erase_session(self, session_id: str) -> None:
+        self.store.sessions.pop(session_id, None)
+        self.store.uploads = {k: v for k, v in self.store.uploads.items() if k[0] != session_id}
+        self.store.events = [e for e in self.store.events if e.session_id != session_id]
+        self.flag_rows.pop(session_id, None)
+        self.scores.pop(session_id, None)
+        self.review_rows = [r for r in self.review_rows if r.session_id != session_id]
 
 
 SCHEMA = """
@@ -358,3 +383,27 @@ class PgReviewStore:
             quiz_id,
         )
         return summarise(rows, {r["type"]: r["n"] for r in types})
+
+    async def user_sessions(self, user_id: int, quiz_id: int | None) -> list[Session]:
+        rows = await self.pool.fetch(
+            "SELECT * FROM sessions WHERE moodle_user_id = $1 AND ($2::bigint IS NULL OR quiz_id = $2)"
+            " ORDER BY created_at",
+            user_id,
+            quiz_id,
+        )
+        return [_session(r) for r in rows]
+
+    async def quiz_users(self, quiz_id: int) -> list[int]:
+        rows = await self.pool.fetch("SELECT DISTINCT moodle_user_id FROM sessions WHERE quiz_id = $1", quiz_id)
+        return sorted(r["moodle_user_id"] for r in rows)
+
+    async def user_quizzes(self, user_id: int) -> list[int]:
+        rows = await self.pool.fetch("SELECT DISTINCT quiz_id FROM sessions WHERE moodle_user_id = $1", user_id)
+        return sorted(r["quiz_id"] for r in rows)
+
+    async def erase_session(self, session_id: str) -> None:
+        sid = uuid.UUID(session_id)
+        async with self.pool.acquire() as conn, conn.transaction():
+            for table in ("reviews", "scores", "flags", "events", "uploads"):
+                await conn.execute(f"DELETE FROM {table} WHERE session_id = $1", sid)  # noqa: S608 - fixed names
+            await conn.execute("DELETE FROM sessions WHERE id = $1", sid)

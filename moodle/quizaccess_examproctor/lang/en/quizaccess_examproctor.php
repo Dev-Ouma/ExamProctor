@@ -24,10 +24,12 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['attemptsummary'] = 'Proctoring: integrity score {$a->score}, {$a->flags} flags. Open the proctoring report.';
 $string['camera'] = 'Camera';
 $string['camera_help'] = 'Take camera snapshots during the attempt and check that one person is present.';
 $string['enabled'] = 'ExamProctor proctoring';
 $string['enabled_help'] = 'Students must pass consent and device checks before the attempt starts. AI flags help reviewers; it never fails a student by itself.';
+$string['flagsonquestion'] = '{$a} proctoring flags';
 $string['identity'] = 'Identity check';
 $string['identity_help'] = 'Capture a reference photo at the start and compare it with later snapshots.';
 $string['identityneedscamera'] = 'The identity check needs the camera.';

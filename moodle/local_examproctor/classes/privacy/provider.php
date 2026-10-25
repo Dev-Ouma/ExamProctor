@@ -23,12 +23,14 @@ use core_privacy\local\request\contextlist;
 use core_privacy\local\request\userlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\writer;
+use local_examproctor\local\privacy_service;
 use local_examproctor\local\refphotos;
 
 /**
  * Privacy provider for local_examproctor.
  *
- * Covers the Moodle-side tables and reference photos. Service-held evidence is added in M5.
+ * Covers the Moodle-side tables, reference photos and, through signed calls, the evidence the
+ * ExamProctor service holds (images, events, flags, scores, reviewer decisions).
  *
  * @package    local_examproctor
  * @copyright  2026 Open University of Kenya
@@ -73,6 +75,10 @@ class provider implements
             'userid' => 'privacy:metadata:service:userid',
             'quizid' => 'privacy:metadata:service:quizid',
             'photo' => 'privacy:metadata:service:photo',
+            'images' => 'privacy:metadata:service:images',
+            'events' => 'privacy:metadata:service:events',
+            'flags' => 'privacy:metadata:service:flags',
+            'decisions' => 'privacy:metadata:service:decisions',
         ], 'privacy:metadata:service');
         return $collection;
     }
@@ -106,6 +112,19 @@ class provider implements
         if (refphotos::get($userid)) {
             $list->add_system_context();
         }
+        $quizids = privacy_service::quizzes_for_user($userid);
+        if ($quizids) {
+            global $DB;
+            [$insql, $params] = $DB->get_in_or_equal($quizids, SQL_PARAMS_NAMED);
+            $list->add_from_sql(
+                "SELECT ctx.id
+                   FROM {course_modules} cm
+                   JOIN {modules} m ON m.id = cm.module AND m.name = 'quiz'
+                   JOIN {context} ctx ON ctx.instanceid = cm.id AND ctx.contextlevel = :level
+                  WHERE cm.instance {$insql}",
+                $params + ['level' => CONTEXT_MODULE]
+            );
+        }
         return $list;
     }
 
@@ -128,6 +147,7 @@ class provider implements
         foreach (self::TABLES as $table) {
             $userlist->add_from_sql('userid', "SELECT userid FROM {{$table}} WHERE quizid = :quizid", ['quizid' => $quizid]);
         }
+        $userlist->add_users(privacy_service::users_in_quiz($quizid));
     }
 
     /**
@@ -167,6 +187,7 @@ class provider implements
                 [get_string('pluginname', 'local_examproctor')],
                 (object) ['attempts' => array_values($attempts), 'prechecks' => array_values($ready)]
             );
+            self::export_service_data($context, (int) $userid, $quizid);
         }
     }
 
@@ -185,6 +206,9 @@ class provider implements
             return;
         }
         if ($context instanceof \context_module && ($quizid = self::quizid($context))) {
+            foreach (privacy_service::users_in_quiz($quizid) as $userid) {
+                privacy_service::erase($userid, $quizid);
+            }
             foreach (self::TABLES as $table) {
                 $DB->delete_records($table, ['quizid' => $quizid]);
             }
@@ -205,6 +229,7 @@ class provider implements
                 refphotos::delete((int) $userid);
             }
             if ($context instanceof \context_module && ($quizid = self::quizid($context))) {
+                privacy_service::erase((int) $userid, $quizid);
                 foreach (self::TABLES as $table) {
                     $DB->delete_records($table, ['quizid' => $quizid, 'userid' => $userid]);
                 }
@@ -230,10 +255,39 @@ class provider implements
         if (!$context instanceof \context_module || !($quizid = self::quizid($context)) || !$userlist->get_userids()) {
             return;
         }
+        foreach ($userlist->get_userids() as $userid) {
+            privacy_service::erase((int) $userid, $quizid);
+        }
         [$insql, $params] = $DB->get_in_or_equal($userlist->get_userids(), SQL_PARAMS_NAMED);
         $params['quizid'] = $quizid;
         foreach (self::TABLES as $table) {
             $DB->delete_records_select($table, "quizid = :quizid AND userid {$insql}", $params);
+        }
+    }
+
+    /**
+     * Export what the service holds for a user in one quiz: session data as JSON, images as files.
+     *
+     * @param \context_module $context
+     * @param int $userid
+     * @param int $quizid
+     * @return void
+     */
+    private static function export_service_data(\context_module $context, int $userid, int $quizid): void {
+        $base = [get_string('pluginname', 'local_examproctor'), get_string('privacy:export:service', 'local_examproctor')];
+        foreach (privacy_service::export($userid, $quizid) as $session) {
+            $path = array_merge($base, [clean_param($session['session_id'] ?? '', PARAM_ALPHANUMEXT)]);
+            $uploads = $session['uploads'] ?? [];
+            $session['uploads'] = [];
+            foreach ($uploads as $upload) {
+                $name = clean_filename(sprintf('%s-%06d.jpg', $upload['kind'] ?? 'image', (int) ($upload['seq'] ?? 0)));
+                if (!empty($upload['jpeg_base64'])) {
+                    writer::with_context($context)->export_custom_file($path, $name, base64_decode($upload['jpeg_base64']));
+                }
+                unset($upload['jpeg_base64']);
+                $session['uploads'][] = $upload + ['file' => $name];
+            }
+            writer::with_context($context)->export_data($path, (object) $session);
         }
     }
 

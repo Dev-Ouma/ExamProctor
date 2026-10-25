@@ -58,7 +58,9 @@ async def signed_by_moodle(
     body = await request.body()
     if not x_examproctor_timestamp.isdigit() or abs(time.time() - int(x_examproctor_timestamp)) > 300:
         raise error(401, "stale", "timestamp outside the accepted window")
-    canonical = f"{request.method} {request.url.path} {hashlib.sha256(body).hexdigest()}"
+    # The query string is signed too, so a captured request cannot be replayed with wider scope.
+    target = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+    canonical = f"{request.method} {target} {hashlib.sha256(body).hexdigest()}"
     expected = sign(settings.moodle_shared_secret, x_examproctor_timestamp, x_examproctor_nonce, canonical)
     if not settings.moodle_shared_secret or not hmac.compare_digest(expected, x_examproctor_signature.lower()):
         raise error(401, "bad_signature", "request not signed by Moodle")

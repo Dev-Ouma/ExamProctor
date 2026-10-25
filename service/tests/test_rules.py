@@ -131,3 +131,18 @@ def test_score_is_traceable_and_banded():
         "FOCUS_LOSS",
     }
     assert round(100 - sum(r["points"] for r in score.reasons), 1) == score.value
+
+
+def test_question_counts_for_review_badges():
+    from datetime import UTC, datetime
+
+    from examproctor_service.analysis.rules import Flag
+    from examproctor_service.worker import question_counts
+
+    now = datetime.now(UTC)
+    flags = [
+        Flag("COPY_PASTE_SEQUENCE", 3, 0.8, now, now, question="question-5-1"),
+        Flag("CONTEXT_MENU_ON_QUESTION", 1, 0.9, now, now, question="question-5-1"),
+        Flag("NO_FACE", 2, 0.9, now, now),
+    ]
+    assert question_counts(flags) == {"question-5-1": 2}

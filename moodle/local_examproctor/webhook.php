@@ -91,6 +91,14 @@ switch ($message['event']) {
             [$sessionid]
         );
         $DB->set_field_select('local_examproctor_attempt', 'band', $band, 'sessionid = ?', [$sessionid]);
+        $questions = [];
+        foreach ((array) ($data['questions'] ?? []) as $elementid => $count) {
+            $elementid = clean_param($elementid, PARAM_ALPHANUMEXT);
+            if ($elementid !== '') {
+                $questions[$elementid] = (int) $count;
+            }
+        }
+        $DB->set_field_select('local_examproctor_attempt', 'questionflags', json_encode($questions), 'sessionid = ?', [$sessionid]);
         $DB->set_field_select(
             'local_examproctor_attempt',
             'flagcount',

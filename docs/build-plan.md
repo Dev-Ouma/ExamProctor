@@ -21,8 +21,9 @@ Tests: 60 s network drop survives; out-of-order and duplicate uploads; retention
 ## M4 AI pipeline (Gate C) (built 2026-10-25; Gate C sign-off pending)
 Face detect / count / match (FACE_MODEL = DeepFace wrapper; underlying model licence verified per weights), head pose, image quality, focus and copy-paste sequence flags, scoring with reasons; evaluation set and bias report by lighting / skin tone / device.
 
-## M5 Review and Moodle integration
+## M5 Review and Moodle integration (built 2026-10-25; deployed to agiledev)
 Review dashboard; decisions and appeals; per-question flag badges; CSV (cursor) and PDF export; Moodle summary tables; privacy provider export and erase through the service.
+Notes: PDF is browser print-to-PDF of the incident report; playback steps through snapshots (no video, per feature triage); student self-view added to the exam shell.
 
 ## M6 Live invigilation
 Live wall over WebSocket and Redis pub/sub; warn / message / pause / terminate with reasons; student notices.

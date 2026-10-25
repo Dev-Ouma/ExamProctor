@@ -219,4 +219,34 @@ class quizaccess_examproctor extends access_rule_base {
             [],
         ];
     }
+    /**
+     * On the attempt review page, show reviewers how many proctoring flags each question has,
+     * linking to the session in the proctoring report.
+     *
+     * @param moodle_page $page the page being set up.
+     * @return void
+     */
+    public function setup_attempt_page($page) {
+        global $DB;
+        if ($page->pagetype !== 'mod-quiz-review' || !has_capability('local/examproctor:review', $page->context)) {
+            return;
+        }
+        $attemptid = optional_param('attempt', 0, PARAM_INT);
+        $link = $attemptid ? $DB->get_record('local_examproctor_attempt', ['attemptid' => $attemptid]) : false;
+        if (!$link) {
+            return;
+        }
+        $counts = array_filter((array) json_decode((string) $link->questionflags, true));
+        $report = new moodle_url('/local/examproctor/report.php', ['cmid' => $page->cm->id]);
+        $page->requires->js_call_amd('quizaccess_examproctor/badges', 'init', [[
+            'counts' => (object) $counts,
+            'url' => $report->out(false) . '#session=' . rawurlencode($link->sessionid),
+            'band' => (string) $link->band,
+            'label' => get_string('flagsonquestion', 'quizaccess_examproctor'),
+            'summary' => get_string('attemptsummary', 'quizaccess_examproctor', (object) [
+                'score' => $link->integrityscore === null ? '-' : round((float) $link->integrityscore),
+                'flags' => (int) $link->flagcount,
+            ]),
+        ]]);
+    }
 }

@@ -18,6 +18,7 @@ from .config import Settings, get_settings
 from .evidence import router as evidence_router
 from .health import run_checks
 from .objectstore import ObjectStore, S3ObjectStore
+from .privacy import router as privacy_router
 from .refphotos import router as refphotos_router
 from .refstore import MemoryRefStore, PgRefStore
 from .retention import loop as retention_loop
@@ -108,6 +109,7 @@ def create_app(
     app.include_router(evidence_router)
     app.include_router(refphotos_router)
     app.include_router(review_router)
+    app.include_router(privacy_router)
     return app
 
 

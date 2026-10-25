@@ -134,9 +134,19 @@ async def rescore(pool: asyncpg.Pool, store: PgStore, session_id: uuid.UUID) -> 
                 "integrity_score": score.value,
                 "band": score.band,
                 "flag_count": len(flags),
+                "questions": question_counts(flags),
                 "version": score.version,
             },
         )
+
+
+def question_counts(flags: list) -> dict[str, int]:
+    """Flags per question element id (for example question-12-3), for badges on Moodle's review page."""
+    counts: dict[str, int] = {}
+    for f in flags:
+        if f.question:
+            counts[f.question] = counts.get(f.question, 0) + 1
+    return counts
 
 
 async def run(settings: Settings) -> None:
