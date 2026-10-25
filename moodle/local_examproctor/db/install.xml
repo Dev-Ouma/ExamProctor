@@ -38,6 +38,8 @@
         <FIELD NAME="integrityscore" TYPE="number" LENGTH="5" NOTNULL="false" SEQUENCE="false" DECIMALS="2"/>
         <FIELD NAME="band" TYPE="char" LENGTH="10" NOTNULL="false" SEQUENCE="false"/>
         <FIELD NAME="flagcount" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
+        <FIELD NAME="decision" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" COMMENT="Latest reviewer decision: no_issue, concern, refer_misconduct"/>
+        <FIELD NAME="appeal" TYPE="char" LENGTH="20" NOTNULL="false" SEQUENCE="false" COMMENT="Latest appeal status: opened, upheld, overturned, withdrawn"/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="false"/>
       </FIELDS>

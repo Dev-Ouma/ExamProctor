@@ -101,6 +101,21 @@ switch ($message['event']) {
         $DB->set_field_select('local_examproctor_attempt', 'timemodified', time(), 'sessionid = ?', [$sessionid]);
         local_examproctor_webhook_reply(200, ['ok' => true]);
         break;
+    case 'decision.recorded':
+        $sessionid = clean_param($data['session_id'] ?? '', PARAM_ALPHANUMEXT);
+        $kind = $data['kind'] ?? '';
+        $value = clean_param($data['value'] ?? '', PARAM_ALPHAEXT);
+        $allowed = [
+            'decision' => ['no_issue', 'concern', 'refer_misconduct'],
+            'appeal' => ['opened', 'upheld', 'overturned', 'withdrawn'],
+        ];
+        if ($sessionid === '' || !isset($allowed[$kind]) || !in_array($value, $allowed[$kind], true)) {
+            local_examproctor_webhook_reply(400, ['error' => 'bad_data']);
+        }
+        $DB->set_field_select('local_examproctor_attempt', $kind, $value, 'sessionid = ?', [$sessionid]);
+        $DB->set_field_select('local_examproctor_attempt', 'timemodified', time(), 'sessionid = ?', [$sessionid]);
+        local_examproctor_webhook_reply(200, ['ok' => true]);
+        break;
     default:
         // Unknown events are acknowledged so the service does not retry them forever.
         local_examproctor_webhook_reply(200, ['ok' => true, 'ignored' => $message['event']]);

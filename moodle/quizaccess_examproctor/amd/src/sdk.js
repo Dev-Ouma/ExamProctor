@@ -119,14 +119,27 @@
 				video: { displaySurface: "monitor" },
 				audio: false
 			});
+			const settings = stream.getVideoTracks()[0]?.getSettings() ?? {};
+			const surface = settings.displaySurface ?? null;
 			return {
 				status: "ok",
 				stream,
-				surface: stream.getVideoTracks()[0]?.getSettings().displaySurface ?? null
+				surface,
+				matchesDisplay: surface ? null : sameShape(settings, globalThis.screen)
 			};
 		} catch (error) {
 			return { status: classify(error) };
 		}
+	}
+	/**
+	* Firefox does not report displaySurface. A whole-display capture has the display's aspect ratio
+	* (resolution may be scaled); a window almost never does, because of title bars and docks.
+	*/
+	function sameShape(settings, display) {
+		if (!settings.width || !settings.height || !display?.width || !display.height) return null;
+		const captured = settings.width / settings.height;
+		const expected = display.width / display.height;
+		return Math.abs(captured - expected) / expected < .02;
 	}
 	function stopStream(stream) {
 		stream?.getTracks().forEach((track) => track.stop());
@@ -173,6 +186,7 @@
 				camera: this.camera.status,
 				screen,
 				screen_surface: this.screen.surface ?? null,
+				screen_matches_display: this.screen.matchesDisplay ?? null,
 				network_ok: true
 			};
 		}
@@ -371,6 +385,59 @@
 		} catch {}
 		return new MemoryQueue();
 	}
+	// src/selfview.ts
+	/** A muted, mirrored, inline video of a camera stream. */
+	function previewVideo(stream, width) {
+		const video = document.createElement("video");
+		video.muted = true;
+		video.playsInline = true;
+		video.autoplay = true;
+		video.srcObject = stream;
+		video.setAttribute("aria-hidden", "true");
+		video.setAttribute("style", `width:${width}px;max-width:100%;transform:scaleX(-1);border-radius:6px;background:#000;display:block`);
+		Promise.resolve(video.play()).catch(() => void 0);
+		return video;
+	}
+	var SelfView = class {
+		constructor(text, camera, screen) {
+			this.text = text;
+			this.hidden = false;
+			this.root = document.createElement("div");
+			this.root.id = "examproctor-selfview";
+			this.root.setAttribute("role", "region");
+			this.root.setAttribute("aria-label", text.self_view);
+			this.root.setAttribute("style", "position:fixed;right:12px;bottom:12px;z-index:100001;background:#111;color:#fff;padding:6px;border-radius:8px;font:12px sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4);max-width:45vw");
+			const bar = document.createElement("div");
+			bar.setAttribute("style", "display:flex;align-items:center;gap:6px;margin-bottom:4px");
+			const rec = document.createElement("span");
+			rec.innerHTML = "<span style=\"display:inline-block;width:8px;height:8px;border-radius:50%;background:#e53935;margin-right:4px\"></span>";
+			rec.append(text.recording);
+			this.screenBadge = document.createElement("span");
+			this.screenBadge.textContent = text.screen_shared;
+			this.screenBadge.setAttribute("style", "background:#037b90;border-radius:4px;padding:0 4px");
+			this.screenBadge.hidden = !screen;
+			this.toggle = document.createElement("button");
+			this.toggle.type = "button";
+			this.toggle.textContent = text.hide_self_view;
+			this.toggle.setAttribute("style", "margin-left:auto;font:12px sans-serif;background:#333;color:#fff;border:0;border-radius:4px;padding:2px 6px;cursor:pointer");
+			this.toggle.addEventListener("click", () => this.setHidden(!this.hidden));
+			bar.append(rec, this.screenBadge, this.toggle);
+			this.root.append(bar);
+			if (camera) {
+				this.video = previewVideo(camera, 180);
+				this.root.append(this.video);
+			} else this.toggle.hidden = true;
+			screen?.getVideoTracks().forEach((track) => track.addEventListener("ended", () => this.screenBadge.hidden = true));
+		}
+		setHidden(hidden) {
+			this.hidden = hidden;
+			if (this.video) this.video.hidden = hidden;
+			this.toggle.textContent = hidden ? this.text.show_self_view : this.text.hide_self_view;
+		}
+		get isHidden() {
+			return this.hidden;
+		}
+	};
 	// src/uploader.ts
 	/** Drains the upload queue: presign -> PUT -> complete, with backoff while offline. */
 	/** Errors that will never succeed on retry: drop the item and report it. */
@@ -458,6 +525,8 @@
 			this.iframe.title = "Quiz";
 			this.iframe.setAttribute("style", "flex:1;border:0;width:100%");
 			overlay.append(this.status, this.iframe);
+			this.selfView = new SelfView(this.deps.text, this.deps.camera, this.deps.screen);
+			overlay.append(this.selfView.root);
 			document.body.append(overlay);
 			this.iframe.addEventListener("load", () => this.onFrameLoad());
 			form.target = name;
@@ -553,6 +622,7 @@
 			await this.events.flush();
 			await this.deps.api.finish().catch(() => void 0);
 			this.events.detachAll();
+			this.selfView?.root.remove();
 			[this.deps.camera, this.deps.screen].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
 		}
 	};
@@ -586,7 +656,13 @@
 		capturing: "ExamProctor is on: camera and screen snapshots are being taken.",
 		screen_stopped: "Screen sharing has stopped. Reload the quiz page to share your screen again.",
 		leaving: "Saving proctoring data…",
-		reconnecting: "Connection lost. Your answers are safe in Moodle; the quiz page will reload when you are back online."
+		reconnecting: "Connection lost. Your answers are safe in Moodle; the quiz page will reload when you are back online.",
+		self_view: "Your camera",
+		recording: "Recording",
+		screen_shared: "Screen shared",
+		hide_self_view: "Hide",
+		show_self_view: "Show camera",
+		preview_hint: "This is what the camera sees. Keep your face in view during the quiz."
 	};
 	var sw = {
 		title: "Kabla ya kuanza",
@@ -616,7 +692,13 @@
 		capturing: "ExamProctor imewashwa: picha za kamera na skrini zinachukuliwa.",
 		screen_stopped: "Kushiriki skrini kumesimama. Pakia upya ukurasa wa jaribio ili kushiriki skrini tena.",
 		leaving: "Tunahifadhi data ya usimamizi…",
-		reconnecting: "Muunganisho umepotea. Majibu yako yako salama kwenye Moodle; ukurasa wa jaribio utapakia upya mtandao ukirudi."
+		reconnecting: "Muunganisho umepotea. Majibu yako yako salama kwenye Moodle; ukurasa wa jaribio utapakia upya mtandao ukirudi.",
+		self_view: "Kamera yako",
+		recording: "Inarekodi",
+		screen_shared: "Skrini inashirikiwa",
+		hide_self_view: "Ficha",
+		show_self_view: "Onyesha kamera",
+		preview_hint: "Hiki ndicho kamera inaona. Weka uso wako uonekane wakati wa jaribio."
 	};
 	function strings(lang) {
 		return lang.toLowerCase().startsWith("sw") ? sw : en;
@@ -685,10 +767,12 @@
 				const result = await run();
 				state.textContent = result.status === "ok" ? t.ok : t[result.status] ?? result.status;
 				button.disabled = result.status === "ok";
+				if (label === "camera" && result.status === "ok" && result.stream) preview.replaceChildren(previewVideo(result.stream, 240), el("small", t.preview_hint, { class: "d-block text-muted" }));
 				checkButton.hidden = controller.pendingDevices().length > 0;
 			});
+			const preview = el("div", "", { class: "mb-2" });
 			row.append(button, state);
-			devices.append(row);
+			devices.append(row, preview);
 		};
 		agree.addEventListener("click", async () => {
 			agree.disabled = true;
@@ -722,6 +806,7 @@
 							screen: controller.screen.stream,
 							staging: options.staging,
 							text: {
+								...t,
 								capturing: t.capturing,
 								screenStopped: t.screen_stopped,
 								leaving: t.leaving,

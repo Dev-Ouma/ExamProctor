@@ -58,6 +58,7 @@ describe("PrecheckController", () => {
       camera: "ok",
       screen: "ok",
       screen_surface: "monitor",
+      screen_matches_display: null,
       network_ok: true,
     });
     // Streams stay open: the exam shell captures from them.

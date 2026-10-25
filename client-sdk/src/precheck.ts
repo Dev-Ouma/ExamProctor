@@ -71,6 +71,7 @@ export class PrecheckController {
       camera: this.camera.status,
       screen,
       screen_surface: this.screen.surface ?? null,
+      screen_matches_display: this.screen.matchesDisplay ?? null,
       network_ok: true,
     };
   }

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     moodle_webhook_host: str | None = None  # Host header when calling Moodle on an internal name
     launch_audience: str = "examproctor-service"
     launch_max_lifetime_s: int = 120
+    staff_audience: str = "examproctor-staff"
+    staff_token_max_lifetime_s: int = 2 * 3600
+    evidence_view_ttl_s: int = 600
 
     # Tokens this service issues to the browser.
     session_signing_key: str = ""

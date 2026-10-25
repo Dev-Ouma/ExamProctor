@@ -1,0 +1,62 @@
+/* Scoped to the report container; Moodle's Bootstrap styles do the rest. */
+.ep-app { --ep-clear: #2e7d32; --ep-review: #b26a00; --ep-high: #c62828; --ep-muted: #5f6b76; }
+.ep-staging { background: #ff7f50; color: #000; padding: 6px 12px; margin-bottom: 12px; border-radius: 4px; }
+.ep-muted { color: var(--ep-muted); }
+.ep-small { font-size: 0.85em; }
+.ep-note { font-size: 0.9em; color: var(--ep-muted); border-left: 3px solid #ccc; padding-left: 8px; }
+.ep-cards { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ep-card { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px 12px; min-width: 110px; }
+.ep-card-value { font-size: 1.5em; font-weight: 600; }
+.ep-card-label { font-size: 0.85em; color: var(--ep-muted); }
+.ep-card.ep-band-high { border-color: var(--ep-high); }
+.ep-card.ep-band-review { border-color: var(--ep-review); }
+.ep-card.ep-band-clear { border-color: var(--ep-clear); }
+.ep-flagbars { margin-bottom: 12px; max-width: 720px; }
+.ep-flagbar { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.ep-flagbar-label { width: 300px; font-size: 0.9em; }
+.ep-flagbar-bar { height: 10px; background: #037b90; border-radius: 2px; min-width: 2px; }
+.ep-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.ep-filters .form-control, .ep-filters .form-select { width: auto; min-width: 180px; }
+.ep-row { cursor: pointer; }
+.ep-band { display: inline-block; border-radius: 10px; padding: 0 8px; font-size: 0.85em; color: #fff; background: #6c757d; }
+.ep-band-clear .ep-band, span.ep-band-clear { background: var(--ep-clear); }
+span.ep-band-review { background: var(--ep-review); }
+span.ep-band-high { background: var(--ep-high); }
+.ep-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ep-facts { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 8px 0; }
+.ep-facts dt { font-weight: normal; font-size: 0.85em; color: var(--ep-muted); }
+.ep-facts dd { margin: 0; font-weight: 600; }
+.ep-player { border: 1px solid #dee2e6; border-radius: 6px; padding: 8px; margin-bottom: 16px; }
+.ep-frames { display: flex; flex-wrap: wrap; gap: 12px; }
+.ep-frame { flex: 1 1 320px; margin: 0; }
+.ep-frame figcaption { font-size: 0.9em; margin-bottom: 4px; }
+.ep-imgwrap { position: relative; background: #111; border-radius: 4px; overflow: hidden; }
+.ep-imgwrap img { display: block; width: 100%; height: auto; }
+.ep-facebox { position: absolute; border: 2px solid #4fc3f7; border-radius: 3px; pointer-events: none; }
+.ep-gone { color: #ccc; padding: 40px 12px; text-align: center; }
+.ep-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 4px; }
+.ep-scrubber { width: 100%; }
+.ep-timeline { position: relative; height: 22px; background: #f1f3f5; border-radius: 4px; margin-top: 4px; }
+.ep-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: #037b90; }
+.ep-mark, .ep-event { position: absolute; top: 3px; width: 10px; height: 16px; margin-left: -5px; border: 0; padding: 0; border-radius: 2px; cursor: pointer; }
+.ep-event { top: 7px; width: 6px; height: 8px; margin-left: -3px; background: #6c757d; border-radius: 50%; }
+.ep-sev-1 { background: #fbc02d; } .ep-sev-2 { background: #fb8c00; } .ep-sev-3 { background: #e53935; } .ep-sev-4 { background: #8e0000; }
+.ep-inline { position: static; display: inline-block; vertical-align: middle; margin: 0 2px; }
+.ep-legend { font-size: 0.8em; margin: 4px 0 0; }
+.ep-sevrow-3 td:first-child, .ep-sevrow-4 td:first-child { border-left: 3px solid var(--ep-high); }
+.ep-events { columns: 2; font-size: 0.9em; padding-left: 1.2em; }
+.ep-events li { break-inside: avoid; }
+.ep-history { padding-left: 1.2em; }
+.ep-notes { white-space: pre-wrap; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; margin: 2px 0 8px; }
+.ep-forms { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
+.ep-form { flex: 1 1 320px; display: flex; flex-direction: column; gap: 6px; max-width: 480px; }
+.ep-printonly { display: none; }
+@media (max-width: 600px) { .ep-events { columns: 1; } .ep-flagbar-label { width: 50%; } }
+@media print {
+  .ep-noprint, .ep-scrubber, .ep-controls, .ep-legend, #page-header, .secondary-navigation, nav, footer, .drawer-toggles { display: none !important; }
+  .ep-printonly { display: inline; }
+  .ep-app { font-size: 11pt; }
+  .ep-imgwrap { max-width: 45%; }
+  .ep-player { break-inside: avoid; }
+  .ep-row { cursor: default; }
+}

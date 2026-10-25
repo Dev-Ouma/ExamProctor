@@ -5,6 +5,7 @@ import { detectCapabilities } from "./capabilities";
 import { strings, type StringKey } from "./i18n";
 import { PrecheckController } from "./precheck";
 import { openQueue } from "./queue";
+import { previewVideo } from "./selfview";
 import { ExamShell } from "./shell";
 
 export interface MountOptions {
@@ -58,7 +59,7 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
   const checkButton = el("button", t.check, { type: "button", class: "btn btn-primary mt-2", hidden: "" });
   root.append(devices, checkButton, message);
 
-  const deviceRow = (label: StringKey, run: () => Promise<{ status: string }>) => {
+  const deviceRow = (label: StringKey, run: () => Promise<{ status: string; stream?: MediaStream }>) => {
     const row = el("div", "", { class: "d-flex align-items-center gap-2 mb-2" });
     const button = el("button", t[label], { type: "button", class: "btn btn-secondary" });
     const state = el("span");
@@ -67,10 +68,14 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
       const result = await run();
       state.textContent = result.status === "ok" ? t.ok : t[result.status as StringKey] ?? result.status;
       button.disabled = result.status === "ok";
+      if (label === "camera" && result.status === "ok" && result.stream) {
+        preview.replaceChildren(previewVideo(result.stream, 240), el("small", t.preview_hint, { class: "d-block text-muted" }));
+      }
       checkButton.hidden = controller.pendingDevices().length > 0;
     });
+    const preview = el("div", "", { class: "mb-2" });
     row.append(button, state);
-    devices.append(row);
+    devices.append(row, preview);
   };
 
   agree.addEventListener("click", async () => {
@@ -109,7 +114,7 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
               camera: controller.camera.stream,
               screen: controller.screen.stream,
               staging: options.staging,
-              text: { capturing: t.capturing, screenStopped: t.screen_stopped, leaving: t.leaving, reconnecting: t.reconnecting },
+              text: { ...t, capturing: t.capturing, screenStopped: t.screen_stopped, leaving: t.leaving, reconnecting: t.reconnecting },
             }).start(form);
           },
           { once: true },

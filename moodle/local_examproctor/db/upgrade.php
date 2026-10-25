@@ -51,5 +51,20 @@ function xmldb_local_examproctor_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026102800, 'local', 'examproctor');
     }
 
+    if ($oldversion < 2026102900) {
+        // M5: reviewer decision and appeal status on the attempt summary.
+        $table = new xmldb_table('local_examproctor_attempt');
+        $fields = [
+            new xmldb_field('decision', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'flagcount'),
+            new xmldb_field('appeal', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'decision'),
+        ];
+        foreach ($fields as $field) {
+            if (!$dbman->field_exists($table, $field)) {
+                $dbman->add_field($table, $field);
+            }
+        }
+        upgrade_plugin_savepoint(true, 2026102900, 'local', 'examproctor');
+    }
+
     return true;
 }

@@ -21,6 +21,8 @@ from .objectstore import ObjectStore, S3ObjectStore
 from .refphotos import router as refphotos_router
 from .refstore import MemoryRefStore, PgRefStore
 from .retention import loop as retention_loop
+from .review import router as review_router
+from .review_store import MemoryReviewStore, PgReviewStore
 from .store import PgStore, Store
 from .webhooks import retry_loop
 
@@ -42,6 +44,11 @@ def create_app(
         app.state.http = http or httpx.AsyncClient(timeout=10)
         app.state.objects = objects or S3ObjectStore(settings)
         app.state.refs = PgRefStore(app.state.store.pool) if owned_store else MemoryRefStore()
+        if owned_store:
+            app.state.reviews = PgReviewStore(app.state.store.pool)
+            await app.state.reviews.migrate()
+        else:
+            app.state.reviews = MemoryReviewStore(app.state.store)
         background = []
         if owned_store:
             await app.state.objects.ensure_bucket()
@@ -100,6 +107,7 @@ def create_app(
     app.include_router(sessions_router)
     app.include_router(evidence_router)
     app.include_router(refphotos_router)
+    app.include_router(review_router)
     return app
 
 

@@ -36,6 +36,12 @@ class config {
     /** @var string Audience the service expects in launch tokens. */
     public const LAUNCH_AUDIENCE = 'examproctor-service';
 
+    /** @var string Audience the service expects in staff (reviewer) tokens. */
+    public const STAFF_AUDIENCE = 'examproctor-staff';
+
+    /** @var int Seconds a staff token is valid. The service accepts at most two hours. */
+    public const STAFF_TOKEN_TTL = 3600;
+
     /**
      * Is ExamProctor configured and not switched off for the whole site?
      *

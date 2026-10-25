@@ -45,6 +45,7 @@ export interface PrecheckResults {
   camera: DeviceStatus;
   screen: DeviceStatus;
   screen_surface?: string | null;
+  screen_matches_display?: boolean | null;
   network_ok: boolean;
 }
 

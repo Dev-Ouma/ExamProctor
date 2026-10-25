@@ -6,6 +6,7 @@
 import type { Policy, SessionApi } from "./api";
 import { captureOnce, type FrameSource, StreamFrameSource } from "./capture";
 import { EventCollector } from "./events";
+import { SelfView, type SelfViewText } from "./selfview";
 import type { UploadQueue } from "./queue";
 import { Uploader } from "./uploader";
 
@@ -18,7 +19,7 @@ export interface ShellDeps {
   camera?: MediaStream;
   screen?: MediaStream;
   staging: boolean;
-  text: { capturing: string; screenStopped: string; leaving: string; reconnecting: string };
+  text: { capturing: string; screenStopped: string; leaving: string; reconnecting: string } & SelfViewText;
 }
 
 export class ExamShell {
@@ -31,6 +32,7 @@ export class ExamShell {
   private stopped = false;
   private lastGoodUrl?: string;
   private frameBroken = false;
+  private selfView?: SelfView;
 
   constructor(private readonly deps: ShellDeps) {
     this.events = new EventCollector(deps.api);
@@ -56,6 +58,8 @@ export class ExamShell {
     this.iframe.title = "Quiz";
     this.iframe.setAttribute("style", "flex:1;border:0;width:100%");
     overlay.append(this.status, this.iframe);
+    this.selfView = new SelfView(this.deps.text, this.deps.camera, this.deps.screen);
+    overlay.append(this.selfView.root);
     document.body.append(overlay);
     this.iframe.addEventListener("load", () => this.onFrameLoad());
 
@@ -168,6 +172,7 @@ export class ExamShell {
     await this.events.flush();
     await this.deps.api.finish().catch(() => undefined);
     this.events.detachAll();
+    this.selfView?.root.remove();
     [this.deps.camera, this.deps.screen].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
   }
 }

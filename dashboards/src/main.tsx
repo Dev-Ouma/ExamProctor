@@ -1,11 +1,17 @@
+/** Entry point. report.php loads this bundle and calls ExamProctorReview.mount(element, config). */
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { App, type Mode } from "./App";
+import type { DashboardConfig } from "./api";
+import { App } from "./App";
+import "./review.css";
 
-const mode: Mode = import.meta.env.VITE_EXAMPROCTOR_MODE === "live" ? "live" : "staging";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App mode={mode} />
-  </StrictMode>,
-);
+export function mount(element: HTMLElement | null, config: DashboardConfig): void {
+  if (!element) return;
+  element.textContent = "";
+  createRoot(element).render(
+    <StrictMode>
+      <App config={config} />
+    </StrictMode>,
+  );
+}

@@ -53,3 +53,30 @@ def decode_session_token(token: str, settings: Settings) -> dict[str, Any]:
         )
     except jwt.PyJWTError as exc:
         raise TokenError(str(exc)) from exc
+
+
+STAFF_CAPS = {"review", "decide", "exportevidence"}
+REQUIRED_STAFF_CLAIMS = ["iss", "aud", "sub", "iat", "exp", "course_id", "quiz_id", "caps"]
+
+
+def decode_staff_token(token: str, settings: Settings) -> dict[str, Any]:
+    """Staff token minted by Moodle for one quiz after a capability check there."""
+    if not settings.moodle_shared_secret:
+        raise TokenError("service has no Moodle shared secret configured")
+    try:
+        claims = jwt.decode(
+            token,
+            settings.moodle_shared_secret,
+            algorithms=["HS256"],
+            audience=settings.staff_audience,
+            issuer=settings.moodle_issuer,
+            options={"require": REQUIRED_STAFF_CLAIMS},
+            leeway=5,
+        )
+    except jwt.PyJWTError as exc:
+        raise TokenError(str(exc)) from exc
+    if claims["exp"] - claims["iat"] > settings.staff_token_max_lifetime_s:
+        raise TokenError("staff token lifetime too long")
+    if not isinstance(claims["caps"], list) or not set(claims["caps"]) <= STAFF_CAPS:
+        raise TokenError("staff token has unknown capabilities")
+    return claims

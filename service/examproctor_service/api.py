@@ -120,7 +120,7 @@ async def precheck(
                 "quiz_id": session.quiz_id,
                 "cmid": session.cmid,
                 "policy": session.policy,
-                "context": {k: v for k, v in session.precheck.items() if v != "ok"},
+                "context": {k: v for k, v in session.precheck.items() if v not in ("ok", None)},
             },
         )
         if await deliver(item, store, settings, http):

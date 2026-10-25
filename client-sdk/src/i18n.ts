@@ -30,6 +30,12 @@ const en = {
   screen_stopped: "Screen sharing has stopped. Reload the quiz page to share your screen again.",
   leaving: "Saving proctoring data…",
   reconnecting: "Connection lost. Your answers are safe in Moodle; the quiz page will reload when you are back online.",
+  self_view: "Your camera",
+  recording: "Recording",
+  screen_shared: "Screen shared",
+  hide_self_view: "Hide",
+  show_self_view: "Show camera",
+  preview_hint: "This is what the camera sees. Keep your face in view during the quiz.",
 };
 
 type Strings = typeof en;
@@ -64,6 +70,12 @@ const sw: Strings = {
   screen_stopped: "Kushiriki skrini kumesimama. Pakia upya ukurasa wa jaribio ili kushiriki skrini tena.",
   leaving: "Tunahifadhi data ya usimamizi…",
   reconnecting: "Muunganisho umepotea. Majibu yako yako salama kwenye Moodle; ukurasa wa jaribio utapakia upya mtandao ukirudi.",
+  self_view: "Kamera yako",
+  recording: "Inarekodi",
+  screen_shared: "Skrini inashirikiwa",
+  hide_self_view: "Ficha",
+  show_self_view: "Onyesha kamera",
+  preview_hint: "Hiki ndicho kamera inaona. Weka uso wako uonekane wakati wa jaribio.",
 };
 
 export type StringKey = keyof Strings;

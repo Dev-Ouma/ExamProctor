@@ -47,3 +47,37 @@ function local_examproctor_pluginfile($course, $cm, $context, $filearea, $args, 
     }
     send_stored_file($file, 0, 0, $forcedownload, $options + ['cacheability' => 'private']);
 }
+
+/**
+ * Add "Proctoring report" to a proctored quiz's secondary navigation for reviewers.
+ *
+ * @param settings_navigation $settingsnav
+ * @param context $context
+ * @return void
+ */
+function local_examproctor_extend_settings_navigation(settings_navigation $settingsnav, context $context): void {
+    global $DB, $PAGE;
+    if ($context->contextlevel !== CONTEXT_MODULE || $PAGE->cm === null || $PAGE->cm->modname !== 'quiz') {
+        return;
+    }
+    if (!has_capability('local/examproctor:review', $context)) {
+        return;
+    }
+    $dbman = $DB->get_manager();
+    if ($dbman->table_exists('quizaccess_examproctor')
+            && !$DB->record_exists('quizaccess_examproctor', ['quizid' => $PAGE->cm->instance, 'enabled' => 1])) {
+        return;
+    }
+    $node = $settingsnav->find('modulesettings', navigation_node::TYPE_SETTING);
+    if (!$node) {
+        return;
+    }
+    $node->add(
+        get_string('report', 'local_examproctor'),
+        new moodle_url('/local/examproctor/report.php', ['cmid' => $PAGE->cm->id]),
+        navigation_node::TYPE_SETTING,
+        null,
+        'local_examproctor_report',
+        new pix_icon('i/report', '')
+    );
+}

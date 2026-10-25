@@ -15,6 +15,11 @@ export async function login(page: Page, username: string) {
 }
 
 export async function openQuiz(page: Page) {
+  // Deployed sites with many courses: go straight to the quiz.
+  if (process.env.QUIZ_URL) {
+    await page.goto(process.env.QUIZ_URL);
+    return;
+  }
   await page.goto("/course/search.php?search=EP-STAGING-101");
   await page.click("text=ExamProctor Staging 101");
   const quiz = page.locator('a[href*="/mod/quiz/view.php"]', { hasText: "Proctored practice quiz" }).first();

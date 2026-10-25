@@ -11,6 +11,8 @@ class PrecheckResults(BaseModel):
     camera: DeviceStatus = "not_requested"
     screen: DeviceStatus = "not_requested"
     screen_surface: str | None = None  # browser displaySurface: monitor | window | browser
+    # Firefox hides displaySurface; the SDK then reports whether the capture has the display's shape.
+    screen_matches_display: bool | None = None
     microphone: DeviceStatus = "not_requested"
     network_ok: bool = True
 
@@ -32,8 +34,14 @@ def evaluate(policy: dict[str, Any], results: PrecheckResults) -> list[str]:
             continue
         if status == "denied" or strict or status == "not_requested":
             reasons.append(f"{device}_{status}")
-    if policy.get("screen") and results.screen == "ok" and results.screen_surface != "monitor":
+    if policy.get("screen") and results.screen == "ok" and not whole_display(results):
         reasons.append("screen_not_whole_display")
     if not results.network_ok:
         reasons.append("network_unavailable")
     return reasons
+
+
+def whole_display(results: PrecheckResults) -> bool:
+    if results.screen_surface is not None:
+        return results.screen_surface == "monitor"
+    return results.screen_matches_display is True

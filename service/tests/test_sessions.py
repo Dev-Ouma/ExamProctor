@@ -1,5 +1,6 @@
 import time
 
+import pytest
 from conftest import launch_token
 
 DESKTOP_OK = {"camera": "ok", "screen": "ok", "screen_surface": "monitor", "network_ok": True}
@@ -160,3 +161,16 @@ def test_undelivered_ready_stays_in_outbox_for_retry(client, settings, moodle, s
     }
     assert store.outbox[0].delivered_at is None
     assert store.outbox[0].attempts == 1
+
+
+@pytest.mark.parametrize(
+    ("matches", "status"),
+    [(True, "ready"), (False, "blocked"), (None, "blocked")],
+)
+def test_browser_without_display_surface_uses_display_shape(client, settings, matches, status):
+    # Firefox reports no displaySurface; the SDK says whether the capture has the display's shape.
+    session, headers = start(client, settings)
+    consent(client, session, headers, settings)
+    body = {**DESKTOP_OK, "screen_surface": None, "screen_matches_display": matches}
+    response = client.post(f"/v1/sessions/{session['session_id']}/precheck", json=body, headers=headers)
+    assert response.json()["status"] == status

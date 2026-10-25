@@ -1,14 +1,170 @@
-import { render, screen } from "@testing-library/react";
-import { App } from "../src/App";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { type DashboardConfig, ReviewApi } from "../src/api";
+import { App, StagingBanner } from "../src/App";
+import { nearestBefore } from "../src/Player";
+
+const config: DashboardConfig = {
+  serviceUrl: "https://svc.example/api",
+  token: "staff-token",
+  tokenTtl: 3600,
+  quizId: 3,
+  quizName: "Practice quiz",
+  courseName: "Course 101",
+  staging: true,
+  caps: ["review", "decide", "exportevidence"],
+  lang: "en",
+  people: { "42": { name: "Synthetic Student", idnumber: "OUK-001" }, "43": { name: "Other Student", idnumber: "" } },
+  attempts: {},
+};
+
+const sessions = [
+  {
+    session_id: "s1",
+    moodle_user_id: 42,
+    status: "ready",
+    created_at: null,
+    started_at: "2026-10-25T10:00:00Z",
+    ended_at: "2026-10-25T10:10:00Z",
+    integrity_score: 62,
+    band: "review",
+    flag_count: 2,
+    uploads: { camera: 2, screen: 1 },
+    decision: null,
+    appeal: null,
+    purged: false,
+  },
+  {
+    session_id: "s2",
+    moodle_user_id: 43,
+    status: "ready",
+    created_at: null,
+    started_at: "2026-10-25T10:01:00Z",
+    ended_at: "2026-10-25T10:09:00Z",
+    integrity_score: 97,
+    band: "clear",
+    flag_count: 0,
+    uploads: { camera: 3 },
+    decision: "no_issue",
+    appeal: null,
+    purged: false,
+  },
+];
+
+const review = {
+  session: {
+    session_id: "s1",
+    moodle_user_id: 42,
+    status: "ready",
+    policy: { camera: true },
+    precheck: { camera: "ok", network: "slow" },
+    consent_version: "v1",
+    started_at: "2026-10-25T10:00:00Z",
+    ended_at: "2026-10-25T10:10:00Z",
+    client_health: null,
+    legal_hold: false,
+    purged: false,
+  },
+  score: { value: 62, band: "review", reasons: [{ flag_index: 0, type: "NO_FACE", points: 20, start: "2026-10-25T10:02:00Z", question: null }], version: "v1" },
+  flags: [
+    { index: 0, type: "NO_FACE", severity: 3, confidence: 0.9, start: "2026-10-25T10:02:00Z", end: "2026-10-25T10:03:00Z", evidence: ["k1"], context: {}, question: null },
+  ],
+  uploads: [
+    { key: "k1", kind: "camera", seq: 0, captured_at: "2026-10-25T10:01:00Z", analysis: { faces: [] }, url: "https://img/1.jpg" },
+    { key: "k2", kind: "camera", seq: 1, captured_at: "2026-10-25T10:02:00Z", analysis: { faces: [] }, url: "https://img/2.jpg" },
+    { key: "k3", kind: "screen", seq: 0, captured_at: "2026-10-25T10:01:30Z", analysis: null, url: "https://img/3.jpg" },
+  ],
+  events: [{ type: "blur", ts: "2026-10-25T10:02:10Z", data: {} }],
+  reviews: [],
+  url_ttl_s: 600,
+};
+
+function fakeFetch() {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const fetcher = async (url: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    const path = String(url).replace(config.serviceUrl, "");
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    if (path.startsWith("/v1/review/quizzes/3/sessions")) return json({ sessions, next: null });
+    if (path === "/v1/review/quizzes/3/summary")
+      return json({ sessions: 2, finished: 2, started: 2, blocked: 0, average_score: 79.5, bands: { review: 1, clear: 1 }, decisions: { undecided: 1, no_issue: 1 }, flag_types: { NO_FACE: 1 } });
+    if (path === "/v1/review/sessions/s1") return json(review);
+    if (path === "/v1/review/sessions/s1/decision") return json({ ...JSON.parse(String(init?.body)), kind: "decision" });
+    return json({ error: { code: "not_found", message: "nope" } }, 404);
+  };
+  return { calls, api: new ReviewApi(config.serviceUrl, config.token, fetcher as typeof fetch) };
+}
+
+describe("StagingBanner", () => {
+  it("shows in staging and hides in live", () => {
+    const { rerender } = render(<StagingBanner mode="staging" />);
+    expect(screen.getByRole("status").textContent).toContain("Staging");
+    rerender(<StagingBanner mode="live" />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
 
 describe("App", () => {
-  it("shows the staging banner in staging mode", () => {
-    render(<App mode="staging" />);
-    expect(screen.getByRole("status").textContent).toContain("Staging");
+  beforeEach(() => {
+    window.location.hash = "";
   });
 
-  it("hides the staging banner in live mode", () => {
-    render(<App mode="live" />);
-    expect(screen.queryByRole("status")).toBeNull();
+  it("lists sessions lowest score first with names from Moodle and sends the staff token", async () => {
+    const { api, calls } = fakeFetch();
+    render(<App config={config} api={api} />);
+    await screen.findByText("Synthetic Student");
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0].textContent).toContain("Synthetic Student");
+    expect(rows[1].textContent).toContain("Other Student");
+    expect(screen.getByText("Average score").previousSibling?.textContent).toBe("80");
+    expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe("Bearer staff-token");
+  });
+
+  it("filters by band", async () => {
+    const { api } = fakeFetch();
+    render(<App config={config} api={api} />);
+    await screen.findByText("Synthetic Student");
+    fireEvent.change(screen.getByLabelText("Filter by band"), { target: { value: "clear" } });
+    expect(screen.queryByText("Synthetic Student")).toBeNull();
+    expect(screen.getByText("Other Student")).toBeTruthy();
+  });
+
+  it("opens a session with playback, flags and a decision form", async () => {
+    const { api, calls } = fakeFetch();
+    render(<App config={config} api={api} />);
+    fireEvent.click(await screen.findByText("Synthetic Student"));
+    await screen.findByText(/Incident report/);
+    expect(screen.getAllByText("No face in camera view").length).toBeGreaterThan(0);
+    expect(screen.getByAltText(/Camera snapshot/)).toBeTruthy();
+    expect(screen.getByAltText(/Screen snapshot/)).toBeTruthy();
+    expect(screen.getByText(/network: slow/)).toBeTruthy();
+
+    const decision = screen.getByLabelText("Record a decision");
+    fireEvent.change(decision, { target: { value: "concern" } });
+    const save = screen.getAllByText("Save")[0] as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Record a decision: notes"), { target: { value: "Face missing for a minute." } });
+    fireEvent.click(save);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/v1/review/sessions/s1/decision"))).toBe(true));
+    const sent = calls.find((c) => c.url.endsWith("/decision"))!;
+    expect(JSON.parse(String(sent.init?.body))).toEqual({ decision: "concern", notes: "Face missing for a minute." });
+  });
+
+  it("shows the service error", async () => {
+    const api = new ReviewApi(config.serviceUrl, config.token, (async () =>
+      new Response(JSON.stringify({ error: { code: "unauthorized", message: "invalid staff token" } }), { status: 401 })) as typeof fetch);
+    render(<App config={config} api={api} />);
+    await screen.findByText(/invalid staff token/);
+    expect(screen.getByText(/access has expired/)).toBeTruthy();
+  });
+});
+
+describe("nearestBefore", () => {
+  const items = [{ t: 10 }, { t: 20 }, { t: 30 }];
+  it("picks the last item at or before the time", () => {
+    expect(nearestBefore(items, 25)?.t).toBe(20);
+    expect(nearestBefore(items, 30)?.t).toBe(30);
+  });
+  it("falls back to the first item", () => {
+    expect(nearestBefore(items, 5)?.t).toBe(10);
   });
 });

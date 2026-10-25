@@ -47,3 +47,18 @@ describe("detectCapabilities", () => {
     });
   });
 });
+
+describe("sameShape", () => {
+  it("accepts a scaled capture of the whole display", async () => {
+    const { sameShape } = await import("../src/devices");
+    expect(sameShape({ width: 1920, height: 1200 }, { width: 1440, height: 900 })).toBe(true);
+  });
+  it("rejects a window with a different shape", async () => {
+    const { sameShape } = await import("../src/devices");
+    expect(sameShape({ width: 1200, height: 1100 }, { width: 1440, height: 900 })).toBe(false);
+  });
+  it("is unknown without sizes", async () => {
+    const { sameShape } = await import("../src/devices");
+    expect(sameShape({}, { width: 1440, height: 900 })).toBeNull();
+  });
+});

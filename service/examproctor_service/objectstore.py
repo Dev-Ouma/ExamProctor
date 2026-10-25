@@ -13,6 +13,7 @@ from .config import Settings
 class ObjectStore(Protocol):
     async def ensure_bucket(self) -> None: ...
     def presign_put(self, key: str, content_type: str, length: int, ttl_s: int) -> str: ...
+    def presign_get(self, key: str, ttl_s: int) -> str: ...
     async def sha256_of(self, key: str) -> tuple[str, int] | None: ...
     async def delete_prefix(self, prefix: str) -> int: ...
     async def get_bytes(self, key: str) -> bytes | None: ...
@@ -53,6 +54,12 @@ class S3ObjectStore:
                 "ContentLength": length,
             },
             ExpiresIn=ttl_s,
+        )
+
+    def presign_get(self, key: str, ttl_s: int) -> str:
+        """Short-lived read link for a reviewer's browser."""
+        return self.public.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=ttl_s
         )
 
     async def sha256_of(self, key: str) -> tuple[str, int] | None:
@@ -104,6 +111,9 @@ class MemoryObjectStore:
 
     def presign_put(self, key: str, content_type: str, length: int, ttl_s: int) -> str:
         return f"memory://evidence/{key}?ttl={ttl_s}"
+
+    def presign_get(self, key: str, ttl_s: int) -> str:
+        return f"memory://evidence/{key}?get&ttl={ttl_s}"
 
     def put(self, key: str, data: bytes) -> None:
         self.objects[key] = data
