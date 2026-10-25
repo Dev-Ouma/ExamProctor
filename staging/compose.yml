@@ -1,0 +1,86 @@
+# ExamProctor staging stack. Start with `make up` from the repo root.
+name: examproctor
+
+services:
+  moodle-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: moodle
+      POSTGRES_USER: moodle
+      POSTGRES_PASSWORD: ${MOODLE_DB_PASSWORD}
+    volumes: [moodle-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moodle"]
+      interval: 5s
+      retries: 20
+
+  moodle:
+    build: ./moodle
+    depends_on:
+      moodle-db: { condition: service_healthy }
+    environment:
+      MOODLE_DB_HOST: moodle-db
+      MOODLE_DB_NAME: moodle
+      MOODLE_DB_USER: moodle
+      MOODLE_DB_PASSWORD: ${MOODLE_DB_PASSWORD}
+      MOODLE_WWWROOT: http://localhost:${MOODLE_PORT:-8080}
+      MOODLE_ADMIN_PASSWORD: ${MOODLE_ADMIN_PASSWORD}
+    ports: ["127.0.0.1:${MOODLE_PORT:-8080}:80"]
+    volumes:
+      - moodledata:/var/moodledata
+      - ../moodle/quizaccess_examproctor:/var/www/html/mod/quiz/accessrule/examproctor:ro
+      - ../moodle/local_examproctor:/var/www/html/local/examproctor:ro
+      - ./seed:/opt/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/login/index.php >/dev/null"]
+      interval: 10s
+      retries: 60
+      start_period: 120s
+
+  service-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: examproctor
+      POSTGRES_USER: examproctor
+      POSTGRES_PASSWORD: ${SERVICE_DB_PASSWORD}
+    volumes: [service-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U examproctor"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  objectstore:
+    # SeaweedFS S3 gateway (Apache-2.0). MinIO images are no longer pullable from public registries.
+    image: chrislusf/seaweedfs:4.45
+    command: server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024
+    volumes: [objectstore:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8333/healthz >/dev/null"]
+      interval: 5s
+      retries: 30
+
+  service:
+    build: ../service
+    depends_on:
+      service-db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      objectstore: { condition: service_healthy }
+    environment:
+      EXAMPROCTOR_ENV: staging
+      EXAMPROCTOR_DATABASE_URL: postgresql://examproctor:${SERVICE_DB_PASSWORD}@service-db:5432/examproctor
+      EXAMPROCTOR_REDIS_URL: redis://redis:6379/0
+      EXAMPROCTOR_OBJECT_STORE_URL: http://objectstore:8333
+    ports: ["127.0.0.1:8000:8000"]
+
+volumes:
+  moodle-db:
+  moodledata:
+  service-db:
+  objectstore:

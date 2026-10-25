@@ -27,7 +27,8 @@ async def check_redis(settings: Settings) -> None:
 
 async def check_object_store(settings: Settings) -> None:
     async with httpx.AsyncClient(timeout=settings.dependency_timeout_s) as client:
-        response = await client.get(f"{settings.object_store_url}/minio/health/live")
+        url = f"{settings.object_store_url}{settings.object_store_health_path}"
+        response = await client.get(url)
         response.raise_for_status()
 
 

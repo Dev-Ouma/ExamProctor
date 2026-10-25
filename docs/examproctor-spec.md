@@ -10,6 +10,7 @@ Source requirements: OUK/LTI/PROC/2026/001 (Learning Technologies & Innovations 
 | v0.1           | Initial architecture, AI pipeline, capacity, privacy, build plan                                                           |
 | v0.2           | Adds Phase 0 reverse engineering, draft API contract, data model, scoring, NFRs, test strategy, acceptance criteria, risks |
 | v0.2.1         | Product renamed to ExamProctor (plugin ids, headers, repo and file names updated)                                          |
+| v0.3.1         | Moodle target corrected to 4.5.1+ on PHP 8.1 (OpenLearn); staging object store SeaweedFS (MinIO images no longer public) |
 | v0.3           | Reconciled with Phase 0 (delta D-01..D-21 approved): exam shell, server-verified gate, policy snapshot per attempt, strict/lenient mode, adaptive capture, new signals, Moodle-app block, async close, optional reference photos, open decisions resolved, sections 3.2 and 3.5 restored |
 
 Sections 7 and 8 remain living drafts; changes go through this change log.
@@ -70,7 +71,7 @@ Confidential notes in `docs/re/` (00 inventory and authorization, 01 plugin stru
  ┌──────────────┐   ┌──────────────────────── Proctoring Service ────────────────────────┐
  │ MOODLE       │   │ API (FastAPI) · Realtime gateway (WebSocket + Redis pub/sub)        │
  │ quizaccess_  │◄─►│ Session/Evidence services · Workers (AI pipeline) · Scheduler        │
- │  examproctor │   │ Postgres · Redis · S3-compatible object store (MinIO/S3)             │
+ │  examproctor │   │ Postgres · Redis · S3-compatible object store             │
  │ local_       │   └──────────────────────────────────────────────────────────────────────┘
  │  examproctor │ ◄── signed webhooks (ready, flag, closed, score) ──┘
  └──────────────┘
@@ -266,7 +267,7 @@ Scaling levers: more API/worker replicas; adaptive sampling (denser on suspicion
 
 ## 12. Staging, test data and testing subsystem
 
-- **Environment:** containerised stack (Moodle, its DB, the service, Postgres, Redis, MinIO) started with one command; **staging** and **live** configs selectable in plugin settings, with a visible staging banner.
+- **Environment:** containerised stack (Moodle, its DB, the service, Postgres, Redis, S3-compatible store: SeaweedFS in staging) started with one command; **staging** and **live** configs selectable in plugin settings, with a visible staging banner.
 - **Synthetic data only:** seed scripts create fake courses, quizzes, users and roles that mirror OUK's structure; synthetic faces/fake camera feeds for tests. No real student data or exam content in dev or CI.
 - **Candidate simulator:** headless browsers with fake camera/screen feeds drive complete exams, including scripted misbehaviour (tab switching, second face, no face, camera blocked, disconnects).
 - **Load tests:** ramp to 5,000 simulated candidates with pass/fail thresholds from section 10.
@@ -333,7 +334,7 @@ examproctor/
 
 | # | Topic | Decision (2026-10-25) |
 | - | ----- | --------------------- |
-| 1 | Moodle / PHP | Moodle 4.5+, PHP 8.3 |
+| 1 | Moodle / PHP | Moodle 4.5.1+ (Build 20250131, version 2024100701.08) on PHP 8.1, as on OUK OpenLearn (`open.ac.ke`, the integration test site). Plugins require Moodle 4.5.0+ and support PHP 8.1-8.3 |
 | 2 | Hosting | KENET (Kenyan research network datacentre); data stays in Kenya |
 | 3 | Retention | 90 days after results are finalised; longer only under legal hold |
 | 4 | Face model | DeepFace wrapper; each underlying model's weight licence verified at Gate C before production |

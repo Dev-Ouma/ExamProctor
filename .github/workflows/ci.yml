@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  service:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - name: Dependency audit
+        run: uv export --frozen --no-dev --format requirements-txt > /tmp/req.txt && uv run pip-audit -r /tmp/req.txt --strict
+
+  js:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        package: [client-sdk, dashboards]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  moodle:
+    # Matches OUK OpenLearn: Moodle 4.5 stable on PHP 8.1 with PostgreSQL.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [local_examproctor, quizaccess_examproctor]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: repo
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.1"
+          extensions: pgsql, zip, gd, xmlrpc, soap, intl
+          ini-values: max_input_vars=5000
+          coverage: none
+      - name: Install moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo "$(cd ci/bin; pwd)" >> $GITHUB_PATH
+          echo "$(cd ci/vendor/bin; pwd)" >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+      - name: Install Moodle with the plugin
+        env:
+          DB: pgsql
+          MOODLE_BRANCH: MOODLE_405_STABLE
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.plugin }}" = "quizaccess_examproctor" ]; then EXTRA="--extra-plugins=repo/moodle/local_examproctor"; fi
+          moodle-plugin-ci install --plugin "repo/moodle/${{ matrix.plugin }}" --db-host=127.0.0.1 $EXTRA
+      - run: moodle-plugin-ci phplint
+        if: ${{ !cancelled() }}
+      - run: moodle-plugin-ci phpcs --max-warnings 0
+        if: ${{ !cancelled() }}
+      - run: moodle-plugin-ci phpdoc --max-warnings 0
+        if: ${{ !cancelled() }}
+      - run: moodle-plugin-ci validate
+        if: ${{ !cancelled() }}
+      - run: moodle-plugin-ci savepoints
+        if: ${{ !cancelled() }}
+      - run: moodle-plugin-ci phpunit --fail-on-warning
+        if: ${{ !cancelled() }}
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

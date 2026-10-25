@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     env: Literal["dev", "staging", "live"] = "dev"
     database_url: str = "postgresql://examproctor:examproctor@localhost:5432/examproctor"
     redis_url: str = "redis://localhost:6379/0"
-    object_store_url: str = "http://localhost:9000"
+    object_store_url: str = "http://localhost:8333"
+    object_store_health_path: str = "/healthz"
     dependency_timeout_s: float = 2.0
 
 

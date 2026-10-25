@@ -4,11 +4,11 @@ Inputs: `examproctor-spec.md` (v0.3, approved), `docs/implementation-requirement
 
 ## M1 Foundation (Gate B)
 1. Repo layout per spec 13 (`moodle/`, `service/`, `client-sdk/`, `dashboards/`, `staging/`, `docs/`). Own git repo, not the umbrella `~/Dev` repo.
-2. `staging/compose.yml`: Moodle 4.5 + PHP 8.3, MariaDB/Postgres for Moodle, FastAPI service, Postgres, Redis, MinIO. `make up` from scratch.
+2. `staging/compose.yml`: Moodle 4.5.1+ (Build 20250131) + PHP 8.1 + Postgres, FastAPI service, Postgres, Redis, SeaweedFS (S3). `make up` from scratch.
 3. Seed script: synthetic courses, quizzes, students, invigilators, reviewers, roles.
 4. Plugin skeletons `quizaccess_examproctor`, `local_examproctor`: version, lang, capabilities, settings, install/upgrade, empty privacy provider.
 5. CI: phpcs (moodle-cs), PHPUnit, ruff + pytest, eslint + vitest, gitleaks, dependency audit.
-Exit: both plugins install on the stack; CI green; owner runs `make up` locally.
+Exit: both plugins install on the stack; CI green; owner runs `make up` locally. Then install both plugins on `open.ac.ke` (owner-run installer, maintenance window) for integration testing.
 
 ## M2 Launch and gate
 Launch JWT minting (RS256, 120 s, jti store); `/v1/sessions/exchange`, consent, precheck; signed `session.ready` webhook with nonce/timestamp; access rule blocks start without a ready record; Moodle app block (R1.4); pre-check UI in the SDK.
