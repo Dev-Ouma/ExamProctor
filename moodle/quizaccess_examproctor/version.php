@@ -25,10 +25,10 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'quizaccess_examproctor';
-$plugin->version = 2026102500;
+$plugin->version = 2026102600;
 $plugin->requires = 2024100700; // Moodle 4.5.
 $plugin->maturity = MATURITY_ALPHA;
-$plugin->release = '0.1.0 (M1)';
+$plugin->release = '0.2.0 (M2)';
 $plugin->dependencies = [
-    'local_examproctor' => 2026102500,
+    'local_examproctor' => 2026102600,
 ];

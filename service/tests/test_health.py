@@ -40,3 +40,11 @@ def test_readiness_returns_503_when_a_dependency_is_down(monkeypatch):
     assert response.status_code == 503
     assert response.json()["status"] == "degraded"
     assert response.json()["checks"]["redis"] == "error: TimeoutError"
+
+
+def test_staging_refuses_short_keys():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="at least 32 characters"):
+        Settings(env="staging", moodle_shared_secret="short", session_signing_key="x" * 32)

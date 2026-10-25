@@ -10,6 +10,7 @@ Source requirements: OUK/LTI/PROC/2026/001 (Learning Technologies & Innovations 
 | v0.1           | Initial architecture, AI pipeline, capacity, privacy, build plan                                                           |
 | v0.2           | Adds Phase 0 reverse engineering, draft API contract, data model, scoring, NFRs, test strategy, acceptance criteria, risks |
 | v0.2.1         | Product renamed to ExamProctor (plugin ids, headers, repo and file names updated)                                          |
+| v0.3.2         | OUK platform wishlist triaged (`docs/feature-triage.md`): network/device readiness, multi-monitor, optional paste block, chat, playback, summaries added to M2-M6; lockdown-style and profiling features not adopted, with reasons |
 | v0.3.1         | Moodle target corrected to 4.5.1+ on PHP 8.1 (OpenLearn); staging object store SeaweedFS (MinIO images no longer public) |
 | v0.3           | Reconciled with Phase 0 (delta D-01..D-21 approved): exam shell, server-verified gate, policy snapshot per attempt, strict/lenient mode, adaptive capture, new signals, Moodle-app block, async close, optional reference photos, open decisions resolved, sections 3.2 and 3.5 restored |
 

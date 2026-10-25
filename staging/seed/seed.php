@@ -82,4 +82,11 @@ if (!$DB->record_exists('quiz_slots', ['quizid' => $quiz->id])) {
     \mod_quiz\quiz_settings::create($quiz->id)->get_grade_calculator()->recompute_quiz_sumgrades();
     mtrace('Added 5 questions to quiz');
 }
+if (!$DB->record_exists('quizaccess_examproctor', ['quizid' => $quiz->id])) {
+    // Proctoring on: camera and screen, lenient so phones can still sit the practice quiz.
+    $DB->insert_record('quizaccess_examproctor', (object) [
+        'quizid' => $quiz->id, 'enabled' => 1, 'camera' => 1, 'screen' => 1, 'identity' => 0, 'strict' => 0,
+    ]);
+    mtrace('Enabled ExamProctor on the quiz');
+}
 mtrace('Seed done. Login users: epteacher, epinvigilator, epreviewer, epstudent01..' . sprintf('%02d', STUDENTS));
