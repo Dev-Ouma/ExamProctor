@@ -12,7 +12,7 @@ from typing import Any, Protocol
 
 import asyncpg
 
-from .store import MemoryStore, Session
+from .store import MemoryStore, Session, migrate
 
 DECISIONS = ("no_issue", "concern", "refer_misconduct")
 APPEALS = ("opened", "upheld", "overturned", "withdrawn")
@@ -62,6 +62,13 @@ class SessionRow:
         }
 
 
+@dataclass
+class LiveRow:
+    row: SessionRow
+    camera: dict[str, Any] | None  # key, captured_at, faces
+    recent_flags: list[dict[str, Any]]
+
+
 def iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
@@ -80,6 +87,7 @@ class ReviewStore(Protocol):
     async def quiz_users(self, quiz_id: int) -> list[int]: ...
     async def user_quizzes(self, user_id: int) -> list[int]: ...
     async def erase_session(self, session_id: str) -> None: ...
+    async def live_view(self, quiz_id: int, ended_after: datetime) -> list[LiveRow]: ...
 
 
 def summarise(rows: list[SessionRow], flag_types: dict[str, int]) -> dict[str, Any]:
@@ -198,6 +206,27 @@ class MemoryReviewStore:
         self.scores.pop(session_id, None)
         self.review_rows = [r for r in self.review_rows if r.session_id != session_id]
 
+    async def live_view(self, quiz_id: int, ended_after: datetime) -> list[LiveRow]:
+        out = []
+        for r in await self.list_sessions(quiz_id, None, 1_000_000):
+            s = r.session
+            if s.started_at is None or (s.ended_at and s.ended_at <= ended_after):
+                continue
+            cameras = [u for u in await self.uploads(s.id) if u["kind"] == "camera"]
+            camera = None
+            if cameras:
+                last = cameras[-1]
+                camera = {
+                    "key": last["key"],
+                    "captured_at": last["captured_at"],
+                    "faces": len((last["analysis"] or {}).get("faces") or []),
+                }
+            flags = [
+                {k: f.get(k) for k in ("type", "start", "end", "severity")} for f in self.flag_rows.get(s.id, [])[-3:]
+            ]
+            out.append(LiveRow(r, camera, flags))
+        return out
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reviews (
@@ -221,6 +250,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     ts TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS sessions_quiz ON sessions (quiz_id, id);
+CREATE INDEX IF NOT EXISTS uploads_latest ON uploads (session_id, kind, captured_at DESC) WHERE status = 'verified';
 """
 
 LIST_SQL = """
@@ -237,6 +267,32 @@ SELECT s.*, sc.value AS score_value, sc.band AS score_band,
  WHERE s.quiz_id = $1 AND ($2::uuid IS NULL OR s.id > $2::uuid)
  ORDER BY s.id
  LIMIT $3
+"""
+
+
+LIVE_SQL = """
+SELECT s.*, sc.value AS score_value, sc.band AS score_band,
+       (SELECT count(*) FROM flags f WHERE f.session_id = s.id) AS flag_count,
+       (SELECT jsonb_object_agg(kind, n) FROM (
+            SELECT kind, count(*) AS n FROM uploads u
+             WHERE u.session_id = s.id AND u.status = 'verified' GROUP BY kind) k) AS upload_counts,
+       (SELECT value FROM reviews r WHERE r.session_id = s.id AND r.kind = 'decision'
+         ORDER BY id DESC LIMIT 1) AS decision,
+       (SELECT value FROM reviews r WHERE r.session_id = s.id AND r.kind = 'appeal'
+         ORDER BY id DESC LIMIT 1) AS appeal,
+       cam.key AS cam_key, cam.captured_at AS cam_at,
+       COALESCE(jsonb_array_length(cam.analysis -> 'faces'), 0) AS cam_faces,
+       (SELECT jsonb_agg(x ORDER BY x ->> 'start') FROM (
+            SELECT jsonb_build_object('type', f.type, 'start', f.start_ts, 'end', f.end_ts,
+                                      'severity', f.severity) AS x
+              FROM flags f WHERE f.session_id = s.id ORDER BY f.start_ts DESC, f.idx DESC LIMIT 3) t) AS recent
+  FROM sessions s
+  LEFT JOIN scores sc ON sc.session_id = s.id
+  LEFT JOIN LATERAL (
+       SELECT key, captured_at, analysis FROM uploads u
+        WHERE u.session_id = s.id AND u.kind = 'camera' AND u.status = 'verified'
+        ORDER BY captured_at DESC LIMIT 1) cam ON true
+ WHERE s.quiz_id = $1 AND s.started_at IS NOT NULL AND (s.ended_at IS NULL OR s.ended_at > $2)
 """
 
 
@@ -264,8 +320,7 @@ class PgReviewStore:
         self.pool = pool
 
     async def migrate(self) -> None:
-        async with self.pool.acquire() as conn:
-            await conn.execute(SCHEMA)
+        await migrate(self.pool, SCHEMA)
 
     async def list_sessions(self, quiz_id: int, after: str | None, limit: int) -> list[SessionRow]:
         rows = await self.pool.fetch(LIST_SQL, quiz_id, uuid.UUID(after) if after else None, limit)
@@ -408,3 +463,25 @@ class PgReviewStore:
             for table in ("reviews", "scores", "flags", "events", "uploads"):
                 await conn.execute(f"DELETE FROM {table} WHERE session_id = $1", sid)  # noqa: S608 - fixed names
             await conn.execute("DELETE FROM sessions WHERE id = $1", sid)
+
+    async def live_view(self, quiz_id: int, ended_after: datetime) -> list[LiveRow]:
+        rows = await self.pool.fetch(LIVE_SQL, quiz_id, ended_after)
+        out = []
+        for r in rows:
+            row = SessionRow(
+                session=_session(r),
+                created_at=r["created_at"],
+                score=r["score_value"],
+                band=r["score_band"],
+                flag_count=r["flag_count"],
+                uploads=json.loads(r["upload_counts"]) if r["upload_counts"] else {},
+                decision=r["decision"],
+                appeal=r["appeal"],
+            )
+            camera = (
+                {"key": r["cam_key"], "captured_at": r["cam_at"].isoformat(), "faces": r["cam_faces"]}
+                if r["cam_key"]
+                else None
+            )
+            out.append(LiveRow(row, camera, json.loads(r["recent"]) if r["recent"] else []))
+        return out

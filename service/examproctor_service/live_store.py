@@ -17,6 +17,8 @@ from typing import Any, Protocol
 import asyncpg
 from redis import asyncio as aioredis
 
+from .store import migrate
+
 ACTION_TYPES = ("warn", "message", "pause", "resume", "terminate")
 
 
@@ -62,6 +64,7 @@ def paused(actions: list[Action]) -> bool:
 class ActionStore(Protocol):
     async def add(self, action: Action) -> Action: ...
     async def for_session(self, session_id: str) -> list[Action]: ...
+    async def for_sessions(self, session_ids: list[str]) -> dict[str, list[Action]]: ...
     async def take_undelivered(self, session_id: str) -> list[Action]: ...
     async def ack(self, session_id: str, action_id: int) -> bool: ...
 
@@ -77,6 +80,14 @@ class MemoryActionStore:
 
     async def for_session(self, session_id: str) -> list[Action]:
         return [a for a in self.rows if a.session_id == session_id]
+
+    async def for_sessions(self, session_ids: list[str]) -> dict[str, list[Action]]:
+        wanted = set(session_ids)
+        out: dict[str, list[Action]] = defaultdict(list)
+        for a in self.rows:
+            if a.session_id in wanted:
+                out[a.session_id].append(a)
+        return out
 
     async def take_undelivered(self, session_id: str) -> list[Action]:
         now = datetime.now(UTC)
@@ -130,8 +141,7 @@ class PgActionStore:
         self.pool = pool
 
     async def migrate(self) -> None:
-        async with self.pool.acquire() as conn:
-            await conn.execute(SCHEMA)
+        await migrate(self.pool, SCHEMA)
 
     async def add(self, a: Action) -> Action:
         row = await self.pool.fetchrow(
@@ -151,6 +161,16 @@ class PgActionStore:
     async def for_session(self, session_id: str) -> list[Action]:
         rows = await self.pool.fetch("SELECT * FROM actions WHERE session_id = $1 ORDER BY id", uuid.UUID(session_id))
         return [_action(r) for r in rows]
+
+    async def for_sessions(self, session_ids: list[str]) -> dict[str, list[Action]]:
+        rows = await self.pool.fetch(
+            "SELECT * FROM actions WHERE session_id = ANY($1::uuid[]) ORDER BY id",
+            [uuid.UUID(s) for s in session_ids],
+        )
+        out: dict[str, list[Action]] = defaultdict(list)
+        for r in rows:
+            out[str(r["session_id"])].append(_action(r))
+        return out
 
     async def take_undelivered(self, session_id: str) -> list[Action]:
         rows = await self.pool.fetch(

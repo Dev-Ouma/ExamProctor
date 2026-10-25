@@ -2,7 +2,7 @@
 COMPOSE := docker compose -f staging/compose.yml --env-file staging/.env --env-file staging/examproctor.secrets
 MOODLE_EXEC := $(COMPOSE) exec -T -u www-data moodle
 
-.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle
+.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle loadtest-up loadtest loadtest-down
 
 staging/.env:
 	@cp staging/.env.example staging/.env
@@ -63,3 +63,21 @@ test-moodle:  ## PHPUnit for both plugins inside the running moodle container.
 	$(COMPOSE) exec -T moodle sh -c 'cd /var/www/html && [ -x vendor/bin/phpunit ] || (curl -sS https://getcomposer.org/installer | php -- --quiet && php composer.phar install --quiet --no-interaction)'
 	$(COMPOSE) exec -T moodle sh -c 'cd /var/www/html && mkdir -p /var/moodledata/phpunit && php admin/tool/phpunit/cli/init.php >/dev/null'
 	$(COMPOSE) exec -T moodle sh -c 'cd /var/www/html && vendor/bin/phpunit --testsuite quizaccess_examproctor_testsuite && vendor/bin/phpunit --testsuite local_examproctor_testsuite'
+
+LOADTEST = docker compose -f staging/compose.yml -f staging/compose.loadtest.yml --env-file staging/.env --env-file staging/examproctor.secrets
+USERS ?= 5000
+RAMP ?= 300
+DURATION ?= 600
+SPEED ?= 1
+
+loadtest-up: staging/.env staging/examproctor.secrets  ## Service stack for load tests (webhooks to a sink, 4 API processes, 4 workers).
+	$(LOADTEST) up -d --build --wait --scale worker=4 service-db redis objectstore service worker sink
+
+loadtest:  ## Simulated candidates against the local stack: make loadtest USERS=5000 RAMP=300 DURATION=600
+	@set -a; . staging/examproctor.secrets; set +a; \
+	cd service && uv run --frozen python -m examproctor_service.simulate run --base http://localhost:8000 \
+		--users $(USERS) --ramp-s $(RAMP) --duration-s $(DURATION) \
+		--speed $(SPEED) --report ../docs/loadtest/latest.md
+
+loadtest-down:  ## Stop the load-test stack (keeps volumes).
+	$(LOADTEST) stop

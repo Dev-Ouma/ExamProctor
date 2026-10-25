@@ -1,0 +1,17 @@
+# Load-test overlay (M7): webhooks go to a sink instead of Moodle, more API processes and workers.
+#   docker compose -f staging/compose.yml -f staging/compose.loadtest.yml --env-file staging/.env \
+#     --env-file staging/examproctor.secrets up -d --build --scale worker=4 service-db redis objectstore service worker sink
+services:
+  sink:
+    build: ../service
+    command: ["python", "-m", "examproctor_service.simulate", "sink", "--port", "9000"]
+
+  service:
+    command: ["uvicorn", "examproctor_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    environment:
+      EXAMPROCTOR_MOODLE_WEBHOOK_URL: http://sink:9000/webhook
+      EXAMPROCTOR_MOODLE_WEBHOOK_HOST: sink
+
+  worker:
+    environment:
+      EXAMPROCTOR_MOODLE_WEBHOOK_URL: http://sink:9000/webhook

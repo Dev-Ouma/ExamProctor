@@ -24,3 +24,4 @@ staging/data/
 staging/examproctor.secrets
 !moodle/*/amd/build/
 service/models/*.onnx
+docs/loadtest/latest.md

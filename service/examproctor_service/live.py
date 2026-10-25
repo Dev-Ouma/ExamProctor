@@ -49,35 +49,33 @@ async def live_sessions(
     staff.require("invigilate")
     in_scope(staff, quiz_id)
     now = datetime.now(UTC)
+    # One query for the sessions and one for their actions, however many students are sitting.
+    rows = await reviews.live_view(quiz_id, now - RECENTLY_ENDED)
+    history = await actions.for_sessions([r.row.session.id for r in rows])
     out = []
-    for row in await reviews.list_sessions(quiz_id, None, 10_000):
-        s = row.session
-        if s.started_at is None or (s.ended_at and now - s.ended_at > RECENTLY_ENDED):
-            continue
-        cameras = [u for u in await reviews.uploads(s.id) if u["kind"] == "camera"]
-        history = await actions.for_session(s.id)
-        flags = await reviews.flags(s.id)
+    for live in rows:
+        s = live.row.session
+        acts = history.get(s.id, [])
+        camera = live.camera
         out.append(
-            row.to_json()
+            live.row.to_json()
             | {
                 "last_seen_at": s.last_seen_at.isoformat() if s.last_seen_at else None,
                 "online": bool(s.last_seen_at and (now - s.last_seen_at).total_seconds() < STALE_AFTER_S),
                 "client_health": s.client_health,
-                "paused": paused(history),
+                "paused": paused(acts),
                 "terminated": s.status == "terminated",
                 "latest_camera": (
                     {
-                        "url": objects.presign_get(cameras[-1]["key"], settings.evidence_view_ttl_s),
-                        "captured_at": cameras[-1]["captured_at"],
-                        "faces": len((cameras[-1]["analysis"] or {}).get("faces") or []),
+                        "url": objects.presign_get(camera["key"], settings.evidence_view_ttl_s),
+                        "captured_at": camera["captured_at"],
+                        "faces": camera["faces"],
                     }
-                    if cameras and not s.purged_at
+                    if camera and not s.purged_at
                     else None
                 ),
-                "recent_flags": [
-                    {"type": f["type"], "start": f["start"], "severity": f["severity"]} for f in flags[-3:]
-                ],
-                "actions": [a.to_json() for a in history[-5:]],
+                "recent_flags": live.recent_flags,
+                "actions": [a.to_json() for a in acts[-5:]],
             }
         )
     order = {"high": 0, "review": 1, "clear": 2, None: 3}

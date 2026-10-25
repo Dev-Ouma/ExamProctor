@@ -29,8 +29,9 @@ Notes: PDF is browser print-to-PDF of the incident report; playback steps throug
 Live wall over WebSocket and Redis pub/sub; warn / message / pause / terminate with reasons; student notices.
 Notes: student notices ride on the 10 s heartbeat (more reliable than a socket on weak networks); pause covers the quiz but cannot stop Moodle's timer, and the student is told so; terminate submits the attempt as it stands and leaves any outcome to a reviewer.
 
-## M7 Simulator and load (Gate D)
+## M7 Simulator and load (Gate D) (built 2026-10-25; Gate D load criterion open)
 Headless candidates with fake media and scripted misbehaviour; ramp to 5,000; security checklist incl. R-01..R-07 regression tests; accessibility checks.
+Notes: simulator, security checklist (`docs/security-checklist.md`) and WCAG 2.1 AA checks done; 1,000 candidates meet every target on a laptop bench; 3,000 and 5,000 saturated the bench itself and need a dedicated host (`docs/loadtest/README.md`).
 
 ## M8 Pilot and readiness
 Pilot kit, go-live checklist, runbooks, kill switch and rollback rehearsal, DPIA sign-off.

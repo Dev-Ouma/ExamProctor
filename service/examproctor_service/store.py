@@ -264,6 +264,18 @@ CREATE INDEX IF NOT EXISTS webhook_outbox_due
 """
 
 
+# Any fixed number shared by all replicas; serialises schema changes across processes.
+MIGRATION_LOCK = 7_301_455
+
+
+async def migrate(pool: asyncpg.Pool, schema: str) -> None:
+    """Apply idempotent DDL. Replicas start together, and concurrent CREATE ... IF NOT EXISTS
+    statements still collide in Postgres, so take a transaction-scoped advisory lock first."""
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock($1)", MIGRATION_LOCK)
+        await conn.execute(schema)
+
+
 class PgStore:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
@@ -271,8 +283,7 @@ class PgStore:
     @classmethod
     async def connect(cls, dsn: str) -> "PgStore":
         pool = await asyncpg.create_pool(dsn, min_size=1, max_size=10)
-        async with pool.acquire() as conn:
-            await conn.execute(SCHEMA)
+        await migrate(pool, SCHEMA)
         return cls(pool)
 
     async def close(self) -> None:
