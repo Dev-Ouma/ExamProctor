@@ -61,7 +61,8 @@ services:
       objectstore: { condition: service_healthy }
     environment: *service-env
     ports: ["127.0.0.1:8000:8000"]
-    mem_limit: 768m
+    command: ["uvicorn", "examproctor_service.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "3", "--proxy-headers"]
+    mem_limit: 1536m
 
   worker:
     image: examproctor-service:live
@@ -71,6 +72,7 @@ services:
     depends_on:
       service: { condition: service_started }
     mem_limit: 768m
+    cpus: 2
 
 volumes:
   service-db:

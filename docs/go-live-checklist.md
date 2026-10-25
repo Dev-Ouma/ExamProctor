@@ -14,7 +14,8 @@ Tick each item with the date and who checked it. Items marked **owner** need an 
 - [ ] Load test at 5,000 on a dedicated host (`docs/loadtest/README.md`; 1,000 passed on a laptop).
 - [ ] Gate C: face-model licences recorded in `docs/licences.md` and bias report on OUK photos
       (`python -m examproctor_service.evaluate`).
-- [ ] DPIA signed by the Data Protection Officer (`docs/dpia-draft.md`). **owner**
+- [x] Lawful basis: consent through the admission offer (OUK decision 2026-10-25; no separate DPA).
+- [ ] DPIA record kept for the DPO (`docs/dpia-draft.md`). **owner**
 - [ ] Degradation policy when the service is down: block new starts (current) or kill switch and
       continue. **owner**
 - [ ] Moodle mobile app: proctored quizzes are blocked there; students told to use a browser.

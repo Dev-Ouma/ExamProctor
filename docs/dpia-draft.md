@@ -11,8 +11,8 @@ Protection Act 2019 and its regulations. The DPO completes the risk ratings and 
 | Data subjects | Students sitting proctored quizzes; staff using the reports (names, actions). |
 | Data | Moodle user id; camera snapshots (face, surroundings); whole-screen snapshots on computers; page events (focus, copy/paste, question shown; never typed content); device check results; face template derived from the admission photo or a live reference frame; flags, score, reviewer decisions, invigilator actions. |
 | Special category | Biometric data (face templates) used for identity verification. |
-| Lawful basis | To be confirmed by the DPO: performance of a public task (assessment) and explicit consent for biometric processing, with a non-biometric alternative. |
-| Consent | Versioned consent text shown before every proctored attempt (English and Swahili); attempts cannot start without it. |
+| Lawful basis | Consent given when the student accepts the OUK admission offer, which covers proctored online assessment (OUK decision, 2026-10-25). No separate data processing agreement is used. |
+| Notice | A short versioned notice with an "I agree" step before every proctored attempt (English and Swahili) tells the student what is captured; the launch gate records it. |
 | Recipients | OUK staff with the review, invigilate or export capability for that quiz only. No third parties; no external AI service. |
 | Location | OUK-controlled servers in Kenya. |
 | Retention | Images deleted 90 days after the session ends unless on legal hold; flags, scores and decisions kept with the assessment record per the records schedule (DPO to set). |
@@ -39,7 +39,7 @@ Protection Act 2019 and its regulations. The DPO completes the risk ratings and 
 
 ## 4. Open items before sign-off
 
-- Lawful basis wording and the non-biometric alternative for students who refuse face matching.
+- Admission offer text: confirm it names proctoring, camera and screen snapshots and face matching.
 - Gate C bias report results.
 - Records schedule for flags and decisions.
 - Notice in the student privacy statement and course pages.
