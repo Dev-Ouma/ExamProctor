@@ -1,0 +1,23 @@
+# Confidential under the vendor authorization letter (2026-10-20): never push.
+re-inputs/
+ref-sample/
+docs/re/
+docs/authorization/
+docs/background/
+
+# Local and build artefacts
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+coverage/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+staging/data/
