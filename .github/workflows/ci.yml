@@ -24,7 +24,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pytest -q
       - name: Dependency audit
-        run: uv export --frozen --no-dev --format requirements-txt > /tmp/req.txt && uv run pip-audit -r /tmp/req.txt --strict
+        run: uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/req.txt && uv run pip-audit -r /tmp/req.txt --strict
 
   js:
     runs-on: ubuntu-24.04
@@ -83,7 +83,10 @@ jobs:
           MOODLE_BRANCH: MOODLE_405_STABLE
         run: |
           EXTRA=""
-          if [ "${{ matrix.plugin }}" = "quizaccess_examproctor" ]; then EXTRA="--extra-plugins=repo/moodle/local_examproctor"; fi
+          if [ "${{ matrix.plugin }}" = "quizaccess_examproctor" ]; then
+            mkdir -p extra && cp -r repo/moodle/local_examproctor extra/
+            EXTRA="--extra-plugins=extra"
+          fi
           moodle-plugin-ci install --plugin "repo/moodle/${{ matrix.plugin }}" --db-host=127.0.0.1 $EXTRA
       - run: moodle-plugin-ci phplint
         if: ${{ !cancelled() }}
