@@ -7,7 +7,7 @@ const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"];
 
 async function audit(page: Page, selector: string, name: string) {
   const result = await new AxeBuilder({ page }).include(selector).withTags(TAGS).analyze();
-  const summary = result.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length} nodes - ${v.help}`);
+  const summary = result.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length} nodes - ${v.help} [${v.nodes.map((n) => n.target.join(" ")).join(", ")}]`);
   test.info().annotations.push({ type: name, description: summary.join("; ") || "no violations" });
   expect(summary, `${name} accessibility violations`).toEqual([]);
 }

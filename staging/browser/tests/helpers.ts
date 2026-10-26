@@ -6,7 +6,10 @@ import { expect, type Page } from "@playwright/test";
 const PASSWORD = process.env.SEED_USER_PASSWORD ?? "Staging#2026";
 const STAGING = resolve(fileURLToPath(new URL(".", import.meta.url)), "../..");
 
+const loggedIn = new WeakMap<Page, string>();
+
 export async function login(page: Page, username: string) {
+  loggedIn.set(page, username);
   await page.goto("/login/index.php");
   await page.fill("#username", username);
   await page.fill("#password", PASSWORD);
@@ -26,7 +29,8 @@ export async function openQuiz(page: Page) {
   await page.goto((await quiz.getAttribute("href"))!);
 }
 
-/** Pass the pre-checks; returns the Start button, now enabled. */
+/** Pass the pre-checks; returns the Start button, now enabled. Chrome's fake camera shows no face,
+ * so on an identity quiz an invigilator lets the student in from the live wall. */
 export async function passPrechecks(page: Page) {
   await page.getByRole("button", { name: /Attempt quiz|Re-attempt quiz/i }).click();
   const panel = page.locator("#examproctor-precheck");
@@ -34,10 +38,39 @@ export async function passPrechecks(page: Page) {
   await panel.getByRole("button", { name: "Allow camera" }).click();
   await panel.getByRole("button", { name: "Share your whole screen" }).click();
   await panel.getByRole("button", { name: /Run the checks/ }).click();
-  await expect(panel.getByRole("status")).toContainText("All checks passed", { timeout: 30_000 });
+  const passed = panel.getByText("All checks passed");
+  const held = panel.getByText("Finish the face check first");
+  await expect(passed.or(held)).toBeVisible({ timeout: 30_000 });
+  if (await held.isVisible()) {
+    await admitAtFaceGate(page, loggedIn.get(page)!);
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(passed).toBeVisible({ timeout: 30_000 });
+  }
   const start = page.locator("form#mod_quiz_preflight_form [name=submitbutton]");
   await expect(start).toBeEnabled();
   return start;
+}
+
+/** An invigilator lets a student held at the face check in, with a reason. */
+export async function admitAtFaceGate(studentPage: Page, student: string) {
+  const context = await studentPage.context().browser()!.newContext({ viewport: { width: 1366, height: 1000 } });
+  const staff = await context.newPage();
+  await login(staff, process.env.INVIGILATOR ?? "epinvigilator");
+  await openQuiz(staff);
+  await staff.getByRole("menuitem", { name: /More/ }).click();
+  await staff.getByRole("menuitem", { name: "Proctoring report" }).click();
+  const liveTab = staff.getByRole("tab", { name: "Live wall" });
+  if (await liveTab.isVisible().catch(() => false)) await liveTab.click();
+  const card = staff
+    .getByRole("article", { name: new RegExp(`Synthetic Student ${student.slice(-2)}`) })
+    .filter({ hasText: /Held at face check/ })
+    .first();
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await card.getByRole("button", { name: "Let in without face check" }).click();
+  await card.getByLabel("Let in without face check: reason").fill("End-to-end test: fake camera has no face");
+  await card.getByRole("button", { name: "Send let in without face check" }).click();
+  await expect(staff.getByText("Let in without face check sent.").first()).toBeVisible();
+  await context.close();
 }
 
 /** Run SQL against the service database (staging only). */

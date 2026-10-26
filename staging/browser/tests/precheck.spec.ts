@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { login, openQuiz } from "./helpers";
+import { admitAtFaceGate, login, openQuiz } from "./helpers";
 
 test("student passes the ExamProctor checks and the attempt starts", async ({ page }) => {
   await login(page, process.env.STUDENT ?? "epstudent02");
@@ -17,10 +17,17 @@ test("student passes the ExamProctor checks and the attempt starts", async ({ pa
   await panel.getByRole("button", { name: "Share your whole screen" }).click();
   await panel.getByRole("button", { name: /Run the checks|Try again/ }).click();
 
-  await expect(panel.getByRole("status")).toContainText(/All checks passed|You cannot start yet/, { timeout: 30_000 });
-  const outcome = await panel.getByRole("status").innerText();
+  // The face check has its own status line; the pre-check outcome is the last one.
+  const status = panel.getByRole("status").last();
+  await expect(status).toContainText(/All checks passed|You cannot start yet/, { timeout: 30_000 });
+  const outcome = await status.innerText();
   test.info().annotations.push({ type: "outcome", description: outcome });
-  if (outcome.includes("cannot start")) {
+  if (outcome.includes("Finish the face check first")) {
+    // Identity quiz: the fake camera shows no face, so the invigilator lets the student in.
+    await admitAtFaceGate(page, process.env.STUDENT ?? "epstudent02");
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(status).toContainText("All checks passed", { timeout: 30_000 });
+  } else if (outcome.includes("cannot start")) {
     throw new Error(`Pre-check blocked in this browser: ${outcome}`);
   }
   await expect(start).toBeEnabled();

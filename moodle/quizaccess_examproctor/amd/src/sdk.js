@@ -937,7 +937,8 @@
 			const show = (result) => {
 				const fix = result.reason ? t[`facecheck_${result.reason}`] : "";
 				const next = result.gated && !result.ok ? t[`facecheck_next_${result.next}`] : "";
-				status.className = `mt-1 ${result.ok ? "text-success" : result.reason ? "text-danger" : ""}`;
+				status.className = `mt-1 ${result.reason && !result.ok ? "text-danger" : ""}`;
+				status.style.color = result.ok ? "#1e6b32" : "";
 				status.textContent = result.ok ? result.gated ? t.facecheck_ok_gated : t.facecheck_ok : [fix, next].filter(Boolean).join(" ");
 			};
 			const run = async () => {

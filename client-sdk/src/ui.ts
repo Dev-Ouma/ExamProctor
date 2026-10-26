@@ -74,7 +74,9 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
     const show = (result: FaceCheck) => {
       const fix = result.reason ? t[`facecheck_${result.reason}` as StringKey] : "";
       const next = result.gated && !result.ok ? t[`facecheck_next_${result.next}` as StringKey] : "";
-      status.className = `mt-1 ${result.ok ? "text-success" : result.reason ? "text-danger" : ""}`;
+      status.className = `mt-1 ${result.reason && !result.ok ? "text-danger" : ""}`;
+      // Bootstrap's text-success fails WCAG contrast on the OUK theme; this green passes (6.5:1 on white).
+      status.style.color = result.ok ? "#1e6b32" : "";
       status.textContent = result.ok
         ? result.gated
           ? t.facecheck_ok_gated
