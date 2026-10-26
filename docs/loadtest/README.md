@@ -45,3 +45,24 @@ limit, and they do not prove 5,000 either. Gate D's load criterion stays **open*
 - Never run a full ramp against agiledev; it shares its host with production sites.
 
 Raw reports: `5000-run2.md` (latest 5,000), `3000.md` (3,000 run).
+
+## agiledev run (2026-10-25, 500 candidates)
+
+Host: agiledev (4 vCPU, 7.7 GB RAM), shared with MySQL and three other sites. Stack as in
+`deploy/compose.yml`: 3 API processes, 1 AI worker capped at 2 CPUs, Postgres capped at 256 MB.
+The simulator ran in a container on the same host, because the office uplink (2.1 Mbit/s up)
+could not carry the uploads from a Mac.
+
+| Candidates | API p95 | Uploads OK | Capture -> flag on wall p95 | Verdict |
+| --- | --- | --- | --- | --- |
+| 500 | 13.3 s | 100 % (6,063) | 33.8 s | miss |
+
+The stepped ramp stopped at the first step, as planned when a target misses. Slowest calls were
+`presign` (p95 14.7 s), `complete` (14.2 s) and `heartbeat` (13.0 s); 18 calls of 31,000 failed
+with connection errors. The host recovered fully; no co-hosted site was down.
+
+Bandwidth is not the limit: 5,000 candidates need about 110 Mbit/s, 11 % of the 1 Gbit/s link.
+CPU and memory are the limit. agiledev cannot run a 5,000 exam, and it misses the targets at 500
+while it also runs the simulator. Gate D needs the dedicated host described in "Next run".
+
+Raw report: `agiledev-500.md`.
