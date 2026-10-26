@@ -77,12 +77,37 @@ export async function admitAtFaceGate(studentPage: Page, student: string) {
   await context.close();
 }
 
-/** Run SQL against the service database (staging only). */
+/** SSH target of a deployed host (REMOTE_SSH=user@host); unset for the local Docker staging. */
+export const REMOTE_SSH = process.env.REMOTE_SSH;
+export const REMOTE_MOODLE_DIR = process.env.REMOTE_MOODLE_DIR ?? "/var/www/html/ouklmsdev";
+const REMOTE_SERVICE_DIR = process.env.REMOTE_SERVICE_DIR ?? "/opt/examproctor";
+
+/** Run SQL against the service database: local staging, or the deployed host over SSH. */
 export function serviceSql(sql: string): string {
+  if (REMOTE_SSH) {
+    // SQL goes through stdin, so no shell quoting on the remote side.
+    return execFileSync(
+      "ssh",
+      ["-o", "BatchMode=yes", REMOTE_SSH,
+        `cd ${REMOTE_SERVICE_DIR} && sudo docker compose exec -T service-db psql -U examproctor -tA -f -`],
+      { encoding: "utf8", input: sql },
+    ).trim();
+  }
   return execFileSync(
     "docker",
     ["compose", "-f", `${STAGING}/compose.yml`, "--env-file", `${STAGING}/.env`, "--env-file",
-      `${STAGING}/examproctor.secrets`, "exec", "-T", "service-db", "psql", "-U", "examproctor", "-tAc", sql],
-    { encoding: "utf8" },
+      `${STAGING}/examproctor.secrets`, "exec", "-T", "service-db", "psql", "-U", "examproctor", "-tA", "-f", "-"],
+    { encoding: "utf8", input: sql },
+  ).trim();
+}
+
+/** Latest finished attempt on the proctored quiz, read from the deployed Moodle over SSH. */
+export function latestProctoredAttempt(): string {
+  const php = `define("CLI_SCRIPT", 1); require "config.php";
+echo $DB->get_field_sql("SELECT MAX(a.id) FROM {quiz_attempts} a JOIN {quizaccess_examproctor} p ON p.quizid = a.quiz AND p.enabled = 1 WHERE a.state = 'finished'");`;
+  return execFileSync(
+    "ssh",
+    ["-o", "BatchMode=yes", REMOTE_SSH!, `cd ${REMOTE_MOODLE_DIR} && sudo -u www-data php`],
+    { encoding: "utf8", input: `<?php ${php}` },
   ).trim();
 }

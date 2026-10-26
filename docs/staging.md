@@ -7,6 +7,8 @@ make test-moodle # PHPUnit for both plugins inside the moodle container
 make e2e-gate    # M2 gate end to end: token -> service -> signed webhook -> attempt link (17 checks)
 make test-browser # real Chromium, fake camera + screen: pre-check, forged start refused,
                  # exam shell capture across page changes and a 60 s offline window (~2 min)
+make test-browser-agiledev # all 11 browser tests against agiledev, none skipped (~7 min):
+                 # service SQL, kill switch and attempt lookup run over SSH (REMOTE_SSH)
 make sdk-moodle  # rebuild client-sdk into the plugin's amd/ folder
 make down        # stop; make reset also deletes data volumes
 ```

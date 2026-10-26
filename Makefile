@@ -2,7 +2,7 @@
 COMPOSE := docker compose -f staging/compose.yml --env-file staging/.env --env-file staging/examproctor.secrets
 MOODLE_EXEC := $(COMPOSE) exec -T -u www-data moodle
 
-.PHONY: models up down reset seed e2e-gate test-browser sdk-moodle logs ps test test-service test-js test-moodle loadtest-up loadtest loadtest-down hawkscan
+.PHONY: models up down reset seed e2e-gate test-browser test-browser-agiledev sdk-moodle logs ps test test-service test-js test-moodle loadtest-up loadtest loadtest-down hawkscan
 
 staging/.env:
 	@cp staging/.env.example staging/.env
@@ -34,6 +34,15 @@ seed:
 
 test-browser:  ## Real Chromium with fake camera/screen against the staging stack.
 	cd staging/browser && npm ci --silent && npx playwright install chromium >/dev/null && STUDENT=epstudent$$(shuf -i 5-20 -n 1 2>/dev/null || jot -r 1 5 20) npx playwright test --workers=1
+
+AGILEDEV ?= wanyoike@102.210.149.27
+AGILEDEV_URL ?= https://agiledev.ouk.ac.ke
+AGILEDEV_QUIZ ?= $(AGILEDEV_URL)/mod/quiz/view.php?id=132468
+
+test-browser-agiledev:  ## Every browser test against agiledev (SQL, kill switch and attempt lookup over SSH).
+	cd staging/browser && MOODLE_URL=$(AGILEDEV_URL) QUIZ_URL='$(AGILEDEV_QUIZ)' REMOTE_SSH=$(AGILEDEV) \
+	  SEED_USER_PASSWORD="$$(ssh -o BatchMode=yes $(AGILEDEV) cat /opt/examproctor/seed-password)" \
+	  npx playwright test --workers=1
 
 sdk-moodle:  ## Rebuild the SDK into quizaccess_examproctor/amd.
 	cd client-sdk && npm run -s build:moodle

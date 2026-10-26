@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
-import { login, openQuiz } from "./helpers";
+import { login, openQuiz, REMOTE_MOODLE_DIR, REMOTE_SSH } from "./helpers";
 
 // M8 rehearsal: the site kill switch turns proctoring off without touching quizzes, and back on.
-// Needs SSH access to the Moodle host (KILLSWITCH_SSH, KILLSWITCH_MOODLE_DIR).
-const ssh = process.env.KILLSWITCH_SSH;
-const dir = process.env.KILLSWITCH_MOODLE_DIR ?? "/var/www/html/ouklmsdev";
+// Needs SSH access to the Moodle host (REMOTE_SSH, REMOTE_MOODLE_DIR).
+const ssh = process.env.KILLSWITCH_SSH ?? REMOTE_SSH;
+const dir = process.env.KILLSWITCH_MOODLE_DIR ?? REMOTE_MOODLE_DIR;
 
 function setKillSwitch(on: boolean) {
   execFileSync("ssh", [
@@ -15,7 +15,7 @@ function setKillSwitch(on: boolean) {
 }
 
 test("kill switch disables and restores the proctoring gate", async ({ page }) => {
-  test.skip(!ssh, "set KILLSWITCH_SSH=user@host");
+  test.skip(!ssh, "set REMOTE_SSH=user@host");
   test.setTimeout(180_000);
   const started = Date.now();
   try {
