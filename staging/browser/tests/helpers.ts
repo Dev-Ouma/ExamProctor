@@ -61,15 +61,19 @@ export async function admitAtFaceGate(studentPage: Page, student: string) {
   await staff.getByRole("menuitem", { name: "Proctoring report" }).click();
   const liveTab = staff.getByRole("tab", { name: "Live wall" });
   if (await liveTab.isVisible().catch(() => false)) await liveTab.click();
-  const card = staff
+  // Earlier runs may leave held sessions for the same student; let them all in.
+  const held = staff
     .getByRole("article", { name: new RegExp(`Synthetic Student ${student.slice(-2)}`) })
-    .filter({ hasText: /Held at face check/ })
-    .first();
-  await expect(card).toBeVisible({ timeout: 30_000 });
-  await card.getByRole("button", { name: "Let in without face check" }).click();
-  await card.getByLabel("Let in without face check: reason").fill("End-to-end test: fake camera has no face");
-  await card.getByRole("button", { name: "Send let in without face check" }).click();
-  await expect(staff.getByText("Let in without face check sent.").first()).toBeVisible();
+    .filter({ hasText: /Held at face check/ });
+  await expect(held.first()).toBeVisible({ timeout: 30_000 });
+  while ((await held.count()) > 0) {
+    const card = held.first();
+    await card.getByRole("button", { name: "Let in without face check" }).click();
+    await card.getByLabel("Let in without face check: reason").fill("End-to-end test: fake camera has no face");
+    await card.getByRole("button", { name: "Send let in without face check" }).click();
+    await expect(staff.getByText("Let in without face check sent.").first()).toBeVisible();
+    await staff.waitForTimeout(1_000);
+  }
   await context.close();
 }
 
