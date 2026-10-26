@@ -210,7 +210,9 @@ class MemoryReviewStore:
         out = []
         for r in await self.list_sessions(quiz_id, None, 1_000_000):
             s = r.session
-            if s.started_at is None or (s.ended_at and s.ended_at <= ended_after):
+            # Students held at the face gate show too, so an invigilator can override.
+            waiting = s.status == "blocked" and s.face_check is not None
+            if (s.started_at is None and not waiting) or (s.ended_at and s.ended_at <= ended_after):
                 continue
             cameras = [u for u in await self.uploads(s.id) if u["kind"] == "camera"]
             camera = None
@@ -292,7 +294,9 @@ SELECT s.*, sc.value AS score_value, sc.band AS score_band,
        SELECT key, captured_at, analysis FROM uploads u
         WHERE u.session_id = s.id AND u.kind = 'camera' AND u.status = 'verified'
         ORDER BY captured_at DESC LIMIT 1) cam ON true
- WHERE s.quiz_id = $1 AND s.started_at IS NOT NULL AND (s.ended_at IS NULL OR s.ended_at > $2)
+ WHERE s.quiz_id = $1 AND (s.ended_at IS NULL OR s.ended_at > $2)
+   AND (s.started_at IS NOT NULL
+        OR (s.status = 'blocked' AND s.face_check IS NOT NULL AND s.updated_at > $2))
 """
 
 
@@ -312,6 +316,7 @@ def _session(row: asyncpg.Record) -> Session:
         client_health=json.loads(row["client_health"]) if row["client_health"] else None,
         legal_hold=row["legal_hold"],
         purged_at=row["purged_at"],
+        face_check=json.loads(row["face_check"]) if row["face_check"] else None,
     )
 
 

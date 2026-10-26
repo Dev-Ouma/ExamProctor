@@ -16,7 +16,13 @@ export const ACTION_LABELS: Record<LiveAction, string> = {
   pause: "Pause",
   resume: "Resume",
   terminate: "End session",
+  face_override: "Let in without face check",
 };
+
+/** A student held before the attempt because the face check has not passed. */
+export function atFaceGate(s: LiveSession): boolean {
+  return !s.started_at && !s.ended_at && !!s.face_check && !s.face_check.passed;
+}
 
 export function LiveWall({ api, config, onOpen }: { api: ReviewApi; config: DashboardConfig; onOpen: (id: string) => void }) {
   const [sessions, setSessions] = useState<LiveSession[] | null>(null);
@@ -100,6 +106,10 @@ export function LiveWall({ api, config, onOpen }: { api: ReviewApi; config: Dash
 
 function stateOf(s: LiveSession): { text: string; cls: string } {
   if (s.terminated) return { text: "Ended by invigilator", cls: "ep-state-ended" };
+  if (atFaceGate(s)) {
+    const match = s.face_check?.similarity;
+    return { text: `Held at face check${match === null || match === undefined ? "" : ` (match ${match.toFixed(2)})`}`, cls: "ep-state-paused" };
+  }
   if (s.ended_at) return { text: "Finished", cls: "ep-state-ended" };
   if (s.paused) return { text: "Paused", cls: "ep-state-paused" };
   if (s.online) return { text: "Online", cls: "ep-state-online" };
@@ -128,7 +138,11 @@ export function LiveCard({
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const active = !s.ended_at;
-  const available: LiveAction[] = active ? ["warn", "message", s.paused ? "resume" : "pause", "terminate"] : [];
+  const available: LiveAction[] = !active
+    ? []
+    : atFaceGate(s)
+      ? ["face_override"]
+      : ["warn", "message", s.paused ? "resume" : "pause", "terminate"];
   const ready = action && reason.trim().length >= 3 && (action !== "message" || message.trim()) && (action !== "terminate" || confirm);
 
   const send = async () => {

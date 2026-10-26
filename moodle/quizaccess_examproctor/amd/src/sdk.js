@@ -62,7 +62,7 @@
 			});
 			if (!response.ok) throw new ApiError(response.status, "put_failed", `object store returned ${response.status}`);
 		}
-		/** Live face check during the pre-check (advisory; nothing is stored). */
+		/** Live face check during the pre-check; a gate when the policy has the identity check. Frames are not stored. */
 		facecheck(jpeg) {
 			return this.call("POST", `/v1/sessions/${this.sessionId}/facecheck`, jpeg, "image/jpeg");
 		}
@@ -714,6 +714,32 @@
 			[this.deps.camera, this.deps.screen].forEach((s) => s?.getTracks().forEach((t) => t.stop()));
 		}
 	};
+	// src/facecheck.ts
+	var UNREADABLE = {
+		ok: false,
+		gated: false,
+		reason: "unreadable",
+		next: "hold_still",
+		reference: "none",
+		faces: 0,
+		face_px: 0,
+		brightness: 0
+	};
+	/** Advisory checks stop after one frame; gated checks keep going so the student can follow the steps. */
+	async function runFaceCheck(deps) {
+		const sleep = deps.sleep ?? ((ms) => new Promise((r) => window.setTimeout(r, ms)));
+		const interval = deps.intervalMs ?? 700;
+		const deadline = deps.timeoutMs ?? 45e3;
+		let waited = 0;
+		for (;;) {
+			const frame = await deps.grab();
+			const result = frame ? await deps.check(frame) : UNREADABLE;
+			deps.onResult(result);
+			if (result.ok || frame && !result.gated || waited >= deadline) return result;
+			await sleep(interval);
+			waited += interval;
+		}
+	}
 	// src/i18n.ts
 	/** Candidate-facing text in English and Swahili. Keys are stable; text may change with the consent version. */
 	var en = {
@@ -764,6 +790,17 @@
 		facecheck_face_too_small: "Your face is too small in the picture. Move closer to the camera.",
 		facecheck_blurry: "The picture is blurry. Hold still and wipe the camera.",
 		facecheck_note: "This check helps you; it does not stop you starting.",
+		facecheck_note_gated: "You must pass this check to start. If it keeps failing, ask the invigilator.",
+		facecheck_look_at_camera: "Look straight at the camera.",
+		facecheck_not_same_person: "Your face does not match your student photo. Only the registered student may sit this exam.",
+		facecheck_turn_head: "Turn your head as asked.",
+		facecheck_turn_other_way: "Turn the other way.",
+		facecheck_next_hold_still: "Look at the camera and hold still.",
+		facecheck_next_turn_left: "Now slowly turn your head to your left.",
+		facecheck_next_turn_right: "Now slowly turn your head to your right.",
+		facecheck_next_look_back: "Good. Now look back at the camera.",
+		facecheck_ok_gated: "Identity confirmed. You are ready.",
+		reason_face_check_not_passed: "Finish the face check first.",
 		paused: "The invigilator has paused your exam. Stay where you are; it will continue when they resume it. Your time keeps running in Moodle.",
 		terminated: "The invigilator has ended your exam session. Your saved answers have been submitted. A reviewer will look at what happened before any decision."
 	};
@@ -815,6 +852,17 @@
 		facecheck_face_too_small: "Uso wako ni mdogo sana kwenye picha. Sogea karibu na kamera.",
 		facecheck_blurry: "Picha haiko wazi. Tulia na usafishe kamera.",
 		facecheck_note: "Ukaguzi huu ni wa kukusaidia; haukuzuii kuanza.",
+		facecheck_note_gated: "Lazima ufaulu ukaguzi huu ili kuanza. Ukiendelea kushindwa, mwombe msimamizi.",
+		facecheck_look_at_camera: "Tazama kamera moja kwa moja.",
+		facecheck_not_same_person: "Uso wako haulingani na picha yako ya mwanafunzi. Ni mwanafunzi aliyesajiliwa tu anayeweza kufanya mtihani huu.",
+		facecheck_turn_head: "Geuza kichwa chako kama ulivyoombwa.",
+		facecheck_turn_other_way: "Geuka upande mwingine.",
+		facecheck_next_hold_still: "Tazama kamera na utulie.",
+		facecheck_next_turn_left: "Sasa geuza kichwa chako polepole kuelekea kushoto kwako.",
+		facecheck_next_turn_right: "Sasa geuza kichwa chako polepole kuelekea kulia kwako.",
+		facecheck_next_look_back: "Vizuri. Sasa tazama kamera tena.",
+		facecheck_ok_gated: "Utambulisho umethibitishwa. Uko tayari.",
+		reason_face_check_not_passed: "Kamilisha ukaguzi wa uso kwanza.",
 		paused: "Msimamizi amesimamisha mtihani wako. Kaa ulipo; utaendelea atakapoufungua tena. Muda wako unaendelea kuhesabiwa kwenye Moodle.",
 		terminated: "Msimamizi amemaliza kipindi chako cha mtihani. Majibu yako yaliyohifadhiwa yamewasilishwa. Mkaguzi ataangalia kilichotokea kabla ya uamuzi wowote."
 	};
@@ -884,20 +932,26 @@
 				type: "button",
 				class: "btn btn-sm btn-secondary mt-1"
 			});
-			host.append(status, again, el("small", t.facecheck_note, { class: "d-block text-muted" }));
+			const note = el("small", controller.policy.identity ? t.facecheck_note_gated : t.facecheck_note, { class: "d-block text-muted" });
+			host.append(status, again, note);
+			const show = (result) => {
+				const fix = result.reason ? t[`facecheck_${result.reason}`] : "";
+				const next = result.gated && !result.ok ? t[`facecheck_next_${result.next}`] : "";
+				status.className = `mt-1 ${result.ok ? "text-success" : result.reason ? "text-danger" : ""}`;
+				status.textContent = result.ok ? result.gated ? t.facecheck_ok_gated : t.facecheck_ok : [fix, next].filter(Boolean).join(" ");
+			};
 			const run = async () => {
 				again.disabled = true;
 				status.className = "mt-1";
 				status.textContent = t.facecheck_running;
 				await new Promise((r) => window.setTimeout(r, 800));
 				try {
-					const frame = await source.grab();
-					const result = frame ? await api.facecheck(frame) : {
-						ok: false,
-						reason: "unreadable"
-					};
-					status.className = `mt-1 ${result.ok ? "text-success" : "text-danger"}`;
-					status.textContent = result.ok ? t.facecheck_ok : t[`facecheck_${result.reason ?? "no_face"}`];
+					const result = await runFaceCheck({
+						grab: () => source.grab(),
+						check: (f) => api.facecheck(f),
+						onResult: show
+					});
+					again.hidden = result.ok && result.gated;
 				} catch {
 					status.textContent = t.error;
 				}

@@ -149,11 +149,13 @@ export interface LiveSession extends SessionRow {
   terminated: boolean;
   client_health: Record<string, unknown> | null;
   latest_camera: { url: string; captured_at: string; faces: number } | null;
+  /** Face gate on identity quizzes; null when the student has not started it. */
+  face_check?: { passed: boolean; override: boolean; stage: string; similarity: number | null } | null;
   recent_flags: { type: string; start: string; severity: number }[];
   actions: { id: number; type: string; reason: string; message: string; actor_name: string; created_at: string; acked_at: string | null }[];
 }
 
-export type LiveAction = "warn" | "message" | "pause" | "resume" | "terminate";
+export type LiveAction = "warn" | "message" | "pause" | "resume" | "terminate" | "face_override";
 
 export class ApiError extends Error {
   constructor(

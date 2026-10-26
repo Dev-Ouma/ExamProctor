@@ -1,7 +1,8 @@
 /** Mounts the pre-check panel inside the Moodle preflight form. Plain DOM, no framework. */
 
-import { ApiError, SessionApi } from "./api";
+import { ApiError, type FaceCheck, SessionApi } from "./api";
 import { detectCapabilities } from "./capabilities";
+import { runFaceCheck } from "./facecheck";
 import { strings, type StringKey } from "./i18n";
 import { PrecheckController } from "./precheck";
 import { openQueue } from "./queue";
@@ -60,12 +61,26 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
   const checkButton = el("button", t.check, { type: "button", class: "btn btn-primary mt-2", hidden: "" });
   root.append(devices, checkButton, message);
 
-  // Live face check: shows the student what to fix (light, distance, one face). Advisory only.
+  // Live face check: shows the student what to fix (light, distance, one face). On an identity
+  // quiz the service also matches the student photo and asks for a head turn before it passes.
   const mountFaceCheck = (host: HTMLElement, stream: MediaStream) => {
     const source = new StreamFrameSource(stream, 640, 0.8);
     const status = el("div", "", { role: "status", "aria-live": "polite", class: "mt-1" });
     const again = el("button", t.facecheck_retry, { type: "button", class: "btn btn-sm btn-secondary mt-1" });
-    host.append(status, again, el("small", t.facecheck_note, { class: "d-block text-muted" }));
+    const note = el("small", controller.policy.identity ? t.facecheck_note_gated : t.facecheck_note, {
+      class: "d-block text-muted",
+    });
+    host.append(status, again, note);
+    const show = (result: FaceCheck) => {
+      const fix = result.reason ? t[`facecheck_${result.reason}` as StringKey] : "";
+      const next = result.gated && !result.ok ? t[`facecheck_next_${result.next}` as StringKey] : "";
+      status.className = `mt-1 ${result.ok ? "text-success" : result.reason ? "text-danger" : ""}`;
+      status.textContent = result.ok
+        ? result.gated
+          ? t.facecheck_ok_gated
+          : t.facecheck_ok
+        : [fix, next].filter(Boolean).join(" ");
+    };
     const run = async () => {
       again.disabled = true;
       status.className = "mt-1";
@@ -73,10 +88,8 @@ export async function mountPrecheck(options: MountOptions): Promise<void> {
       // Give the camera a moment to adjust exposure after it starts.
       await new Promise((r) => window.setTimeout(r, 800));
       try {
-        const frame = await source.grab();
-        const result = frame ? await api.facecheck(frame) : { ok: false, reason: "unreadable" as const };
-        status.className = `mt-1 ${result.ok ? "text-success" : "text-danger"}`;
-        status.textContent = result.ok ? t.facecheck_ok : t[`facecheck_${result.reason ?? "no_face"}` as StringKey];
+        const result = await runFaceCheck({ grab: () => source.grab(), check: (f) => api.facecheck(f), onResult: show });
+        again.hidden = result.ok && result.gated;
       } catch {
         status.textContent = t.error;
       }

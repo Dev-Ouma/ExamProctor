@@ -30,6 +30,7 @@ class Session:
     client_health: dict[str, Any] | None = None
     legal_hold: bool = False
     purged_at: datetime | None = None
+    face_check: dict[str, Any] | None = None  # facegate state; passed or overridden unlocks identity
 
 
 UPLOAD_KINDS = ("camera", "screen", "reference", "room_scan")
@@ -219,6 +220,7 @@ CREATE INDEX IF NOT EXISTS events_session ON events (session_id, client_ts);
 ALTER TABLE uploads ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
 ALTER TABLE uploads ADD COLUMN IF NOT EXISTS analysis JSONB;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS reference_embedding JSONB;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS face_check JSONB;
 CREATE INDEX IF NOT EXISTS uploads_unanalysed ON uploads (captured_at)
     WHERE status = 'verified' AND analysis IS NULL;
 CREATE TABLE IF NOT EXISTS reference_photos (
@@ -337,6 +339,7 @@ class PgStore:
             client_health=json.loads(row["client_health"]) if row["client_health"] else None,
             legal_hold=row["legal_hold"],
             purged_at=row["purged_at"],
+            face_check=json.loads(row["face_check"]) if row["face_check"] else None,
         )
 
     async def save_session(self, s: Session) -> None:
@@ -345,7 +348,7 @@ class PgStore:
             " consented_at = CASE WHEN $3::text IS NOT NULL THEN COALESCE(consented_at, now()) END,"
             " precheck = $4, ready_delivered = $5, started_at = $6, ended_at = $7,"
             " last_seen_at = $8, client_health = $9, legal_hold = $10, purged_at = $11,"
-            " updated_at = now() WHERE id = $1",
+            " face_check = $12, updated_at = now() WHERE id = $1",
             uuid.UUID(s.id),
             s.status,
             s.consent_version,
@@ -357,6 +360,7 @@ class PgStore:
             json.dumps(s.client_health) if s.client_health is not None else None,
             s.legal_hold,
             s.purged_at,
+            json.dumps(s.face_check) if s.face_check is not None else None,
         )
 
     async def enqueue(self, event: str, payload: dict[str, Any]) -> OutboxItem:

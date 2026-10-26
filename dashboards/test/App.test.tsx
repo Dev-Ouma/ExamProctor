@@ -224,4 +224,25 @@ describe("Live wall", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     expect(send.disabled).toBe(false);
   });
+
+  it("lets an invigilator admit a student held at the face check, with a reason", async () => {
+    const held = { ...live, started_at: null, status: "blocked", latest_camera: null, recent_flags: [] };
+    const { calls } = liveApi();
+    const fetcher = async (url: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), body: init?.body ? String(init.body) : undefined });
+      const path = String(url).replace(config.serviceUrl, "");
+      const face_check = { passed: false, override: false, stage: "frontal", similarity: 0.12 };
+      if (path === "/v1/live/quizzes/3/sessions") return new Response(JSON.stringify({ sessions: [{ ...held, face_check }] }));
+      return new Response(JSON.stringify({ id: 1 }));
+    };
+    const api = new ReviewApi(config.serviceUrl, config.token, fetcher as typeof fetch);
+    render(<App config={{ ...config, caps: ["invigilate"] }} api={api} />);
+    await screen.findByText("Held at face check (match 0.12)");
+    expect(screen.queryByRole("button", { name: "Warn" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Let in without face check" }));
+    fireEvent.change(screen.getByLabelText("Let in without face check: reason"), { target: { value: "Showed student ID on camera" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send let in without face check" }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/actions"))).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.url.endsWith("/actions"))!.body!).type).toBe("face_override");
+  });
 });

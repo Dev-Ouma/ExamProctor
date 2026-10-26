@@ -108,6 +108,9 @@ async def precheck(
     if session.status == "ready":
         return status_body(session)
     reasons = evaluate(session.policy, body)
+    check = session.face_check or {}
+    if session.policy.get("identity") and not (check.get("stage") == "passed" or check.get("override")):
+        reasons.append("face_check_not_passed")
     session.precheck = body.model_dump()
     session.status = "blocked" if reasons else "ready"
     await store.save_session(session)

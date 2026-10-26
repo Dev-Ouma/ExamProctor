@@ -65,6 +65,7 @@ async def live_sessions(
                 "client_health": s.client_health,
                 "paused": paused(acts),
                 "terminated": s.status == "terminated",
+                "face_check": face_summary(s.face_check),
                 "latest_camera": (
                     {
                         "url": objects.presign_get(camera["key"], settings.evidence_view_ttl_s),
@@ -86,7 +87,7 @@ async def live_sessions(
 
 
 class ActionRequest(BaseModel):
-    type: Literal["warn", "message", "pause", "resume", "terminate"]
+    type: Literal["warn", "message", "pause", "resume", "terminate", "face_override"]
     reason: str = Field(min_length=3, max_length=1000)
     message: str = Field(default="", max_length=1000)
 
@@ -116,6 +117,8 @@ async def act(
         raise error(409, "not_paused", "the session is not paused")
     if body.type == "pause" and paused(history):
         raise error(409, "already_paused", "the session is already paused")
+    if body.type == "face_override" and not session.policy.get("identity"):
+        raise error(409, "no_face_gate", "this quiz does not use the identity check")
     action = await actions.add(
         Action(
             session_id=session.id,
@@ -141,8 +144,23 @@ async def act(
                 "actor_id": staff.user_id,
             },
         )
+    if body.type == "face_override":
+        # The invigilator has checked the student another way (ID card on camera, video call).
+        session.face_check = (session.face_check or {}) | {"override": True, "override_by": staff.user_id}
+        await store.save_session(session)
     await bus.publish(session.quiz_id, {"type": "action", "session_id": session.id, "action": body.type})
     return action.to_json()
+
+
+def face_summary(check: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not check:
+        return None
+    return {
+        "passed": check.get("stage") == "passed" or bool(check.get("override")),
+        "override": bool(check.get("override")),
+        "stage": check.get("stage"),
+        "similarity": check.get("similarity"),
+    }
 
 
 @router.websocket("/quizzes/{quiz_id}/stream")

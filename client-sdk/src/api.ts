@@ -70,7 +70,22 @@ type Fetch = typeof fetch;
 
 export interface FaceCheck {
   ok: boolean;
-  reason: "unreadable" | "too_dark" | "no_face" | "multiple_faces" | "face_too_small" | "blurry" | null;
+  reason:
+    | "unreadable"
+    | "too_dark"
+    | "no_face"
+    | "multiple_faces"
+    | "face_too_small"
+    | "blurry"
+    | "look_at_camera"
+    | "not_same_person"
+    | "turn_head"
+    | "turn_other_way"
+    | null;
+  /** True when the quiz uses the identity check: the service decides, and the attempt waits for a pass. */
+  gated: boolean;
+  next: "hold_still" | "turn_left" | "turn_right" | "look_back" | "done";
+  reference: "institutional" | "none";
   faces: number;
   face_px: number;
   brightness: number;
@@ -156,7 +171,7 @@ export class SessionApi {
     }
   }
 
-  /** Live face check during the pre-check (advisory; nothing is stored). */
+  /** Live face check during the pre-check; a gate when the policy has the identity check. Frames are not stored. */
   facecheck(jpeg: ArrayBuffer): Promise<FaceCheck> {
     return this.call("POST", `/v1/sessions/${this.sessionId}/facecheck`, jpeg, "image/jpeg");
   }
